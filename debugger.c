@@ -1,10 +1,7 @@
 #include <stdio.h>
 #include "debugger.h"
-#include "commands.h"
 #include "breakpoints.h"
-
-#include <stdio.h>
-#include "debugger.h"
+#include "commands.h"
 #include "symbols.h"
 
 int debugger_start(debugger_t *dbg, const char *program)
@@ -149,22 +146,31 @@ void debugger_loop(debugger_t *dbg)
                     source_shown = 1;
                 }
 
-                else if (ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT
-                    && dbg->breakpoint_addr != NULL)
+                else if (ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT)
                 {
-                    remove_breakpoint(dbg);
-
                     CONTEXT ctx = {0};
                     ctx.ContextFlags = CONTEXT_FULL;
                     GetThreadContext(dbg->thread, &ctx);
-                    ctx.Rip--;
-                    SetThreadContext(dbg->thread, &ctx);
 
-                    printf("hit breakpoint at %p\n", dbg->breakpoint_addr);
-                    if (!show_source_line(dbg, ctx.Rip))
-                        print_disassembly(dbg, ctx.Rip, 10);
-                    source_shown = 1;
-                    dbg->breakpoint_addr = NULL;
+                    void *hit_addr = (void*)(ctx.Rip - 1);
+                    breakpoint_t *bp = find_breakpoint(dbg, hit_addr);
+
+                    if (bp != NULL)
+                    {
+                        remove_breakpoint_at(dbg, hit_addr);
+
+                        ctx.Rip--;
+                        SetThreadContext(dbg->thread, &ctx);
+
+                        printf("hit breakpoint at %p\n", hit_addr);
+                        if (!show_source_line(dbg, ctx.Rip))
+                            print_disassembly(dbg, ctx.Rip, 10);
+                        source_shown = 1;
+                    }
+                    else
+                    {
+                        printf("breakpoint at %p (not tracked)\n", hit_addr);
+                    }
                 }
 
                 if (ev.u.Exception.ExceptionRecord.ExceptionCode == 0x80000004)

@@ -569,6 +569,41 @@ void disassemble_at(debugger_t *dbg, DWORD64 addr, int count)
     unsigned char buf[256];
     SIZE_T n = 0;
 
+    int had_bp[MAX_BREAKPOINTS] = {0};
+    BYTE saved_bp_byte[MAX_BREAKPOINTS] = {0};
+    DWORD64 bp_addr[MAX_BREAKPOINTS] = {0};
+    int had_bp_count = 0;
+
+    int had_temp_bp = 0;
+    BYTE saved_temp_bp_byte = 0;
+    DWORD64 temp_bp_addr = 0;
+
+    for (int i = 0; i < dbg->breakpoint_count; i++)
+    {
+        DWORD64 bp = (DWORD64)dbg->breakpoints[i].addr;
+        if (bp >= addr && bp < addr + sizeof(buf))
+        {
+            ReadProcessMemory(dbg->process, (void*)bp, &saved_bp_byte[had_bp_count], 1, &n);
+            WriteProcessMemory(dbg->process, (void*)bp, &dbg->breakpoints[i].original_byte, 1, &n);
+            FlushInstructionCache(dbg->process, (void*)bp, 1);
+            bp_addr[had_bp_count] = bp;
+            had_bp[had_bp_count] = 1;
+            had_bp_count++;
+        }
+    }
+
+    if (dbg->temp_bp_addr != NULL)
+    {
+        temp_bp_addr = (DWORD64)dbg->temp_bp_addr;
+        if (temp_bp_addr >= addr && temp_bp_addr < addr + sizeof(buf))
+        {
+            ReadProcessMemory(dbg->process, (void*)temp_bp_addr, &saved_temp_bp_byte, 1, &n);
+            WriteProcessMemory(dbg->process, (void*)temp_bp_addr, &dbg->temp_bp_byte, 1, &n);
+            FlushInstructionCache(dbg->process, (void*)temp_bp_addr, 1);
+            had_temp_bp = 1;
+        }
+    }
+
     ReadProcessMemory(
         dbg->process,
         (void*)addr,
@@ -576,6 +611,29 @@ void disassemble_at(debugger_t *dbg, DWORD64 addr, int count)
         sizeof(buf),
         &n
     );
+
+    for (int i = 0; i < had_bp_count; i++)
+    {
+        if (had_bp[i])
+        {
+            BYTE cc = 0xCC;
+            WriteProcessMemory(dbg->process, (void*)bp_addr[i], &cc, 1, &n);
+            FlushInstructionCache(dbg->process, (void*)bp_addr[i], 1);
+        }
+    }
+
+    if (had_temp_bp)
+    {
+        BYTE cc = 0xCC;
+        WriteProcessMemory(dbg->process, (void*)temp_bp_addr, &cc, 1, &n);
+        FlushInstructionCache(dbg->process, (void*)temp_bp_addr, 1);
+    }
+
+    if (n == 0)
+    {
+        printf("cannot read memory at 0x%llx\n", addr);
+        return;
+    }
 
     printf("disassembly at 0x%llx:\n", addr);
 

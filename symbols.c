@@ -212,6 +212,8 @@ void print_variable(debugger_t *dbg, const char *name)
 
     IMAGEHLP_STACK_FRAME img_frame = {0};
     img_frame.InstructionOffset = ctx.Rip;
+    img_frame.FrameOffset = ctx.Rsp;
+    img_frame.StackOffset = ctx.Rsp;
 
     SymSetContext(dbg->sym_handle, &img_frame, NULL);
 

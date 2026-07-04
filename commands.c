@@ -73,9 +73,32 @@ void command_loop(debugger_t *dbg)
 
         else if (strncmp(line, "x", 1) == 0)
         {
-            unsigned long long addr;
+            char arg[256] = {0};
+            sscanf(line, "%*s %255[^\n]", arg);
 
-            sscanf(line, "x %llx", &addr);
+            unsigned long long addr = 0;
+            if (strncmp(arg, "rsp+", 4) == 0 ||
+                strncmp(arg, "rsp-", 4) == 0)
+            {
+                int offset = (int)atoi(arg + 3);
+                CONTEXT ctx = {0};
+                ctx.ContextFlags = CONTEXT_FULL;
+                GetThreadContext(dbg->thread, &ctx);
+                addr = ctx.Rsp + offset;
+            }
+            else if (strncmp(arg, "rbp+", 4) == 0 ||
+                     strncmp(arg, "rbp-", 4) == 0)
+            {
+                int offset = (int)atoi(arg + 3);
+                CONTEXT ctx = {0};
+                ctx.ContextFlags = CONTEXT_FULL;
+                GetThreadContext(dbg->thread, &ctx);
+                addr = ctx.Rbp + offset;
+            }
+            else
+            {
+                sscanf(arg, "%llx", &addr);
+            }
 
             examine_memory(dbg, (void*)addr);
         }
