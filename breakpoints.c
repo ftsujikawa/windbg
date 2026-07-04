@@ -1,12 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "breakpoints.h"
 
 breakpoint_t *find_breakpoint(debugger_t *dbg, void *addr)
 {
-    for (int i = 0; i < dbg->breakpoint_count; i++)
+    for (breakpoint_t *bp = dbg->breakpoints; bp != NULL; bp = bp->next)
     {
-        if (dbg->breakpoints[i].addr == addr)
-            return &dbg->breakpoints[i];
+        if (bp->addr == addr)
+            return bp;
     }
     return NULL;
 }
@@ -21,16 +22,17 @@ int set_breakpoint(debugger_t *dbg, void *addr)
         return 0;
     }
 
-    if (dbg->breakpoint_count >= MAX_BREAKPOINTS)
+    breakpoint_t *bp = (breakpoint_t*)malloc(sizeof(breakpoint_t));
+    if (bp == NULL)
     {
-        printf("too many breakpoints\n");
+        printf("out of memory\n");
         return -1;
     }
 
     ReadProcessMemory(
         dbg->process,
         addr,
-        &dbg->breakpoints[dbg->breakpoint_count].original_byte,
+        &bp->original_byte,
         1,
         &n
     );
@@ -51,8 +53,9 @@ int set_breakpoint(debugger_t *dbg, void *addr)
         1
     );
 
-    dbg->breakpoints[dbg->breakpoint_count].addr = addr;
-    dbg->breakpoint_count++;
+    bp->addr = addr;
+    bp->next = dbg->breakpoints;
+    dbg->breakpoints = bp;
 
     printf("breakpoint set at %p\n", addr);
 

@@ -569,25 +569,23 @@ void disassemble_at(debugger_t *dbg, DWORD64 addr, int count)
     unsigned char buf[256];
     SIZE_T n = 0;
 
-    int had_bp[MAX_BREAKPOINTS] = {0};
-    BYTE saved_bp_byte[MAX_BREAKPOINTS] = {0};
-    DWORD64 bp_addr[MAX_BREAKPOINTS] = {0};
     int had_bp_count = 0;
+    BYTE saved_bp_byte[256] = {0};
+    DWORD64 saved_bp_addr[256] = {0};
 
     int had_temp_bp = 0;
     BYTE saved_temp_bp_byte = 0;
     DWORD64 temp_bp_addr = 0;
 
-    for (int i = 0; i < dbg->breakpoint_count; i++)
+    for (breakpoint_t *bp = dbg->breakpoints; bp != NULL; bp = bp->next)
     {
-        DWORD64 bp = (DWORD64)dbg->breakpoints[i].addr;
-        if (bp >= addr && bp < addr + sizeof(buf))
+        DWORD64 bp_addr = (DWORD64)bp->addr;
+        if (bp_addr >= addr && bp_addr < addr + sizeof(buf))
         {
-            ReadProcessMemory(dbg->process, (void*)bp, &saved_bp_byte[had_bp_count], 1, &n);
-            WriteProcessMemory(dbg->process, (void*)bp, &dbg->breakpoints[i].original_byte, 1, &n);
-            FlushInstructionCache(dbg->process, (void*)bp, 1);
-            bp_addr[had_bp_count] = bp;
-            had_bp[had_bp_count] = 1;
+            ReadProcessMemory(dbg->process, (void*)bp_addr, &saved_bp_byte[had_bp_count], 1, &n);
+            WriteProcessMemory(dbg->process, (void*)bp_addr, &bp->original_byte, 1, &n);
+            FlushInstructionCache(dbg->process, (void*)bp_addr, 1);
+            saved_bp_addr[had_bp_count] = bp_addr;
             had_bp_count++;
         }
     }
@@ -614,12 +612,9 @@ void disassemble_at(debugger_t *dbg, DWORD64 addr, int count)
 
     for (int i = 0; i < had_bp_count; i++)
     {
-        if (had_bp[i])
-        {
-            BYTE cc = 0xCC;
-            WriteProcessMemory(dbg->process, (void*)bp_addr[i], &cc, 1, &n);
-            FlushInstructionCache(dbg->process, (void*)bp_addr[i], 1);
-        }
+        BYTE cc = 0xCC;
+        WriteProcessMemory(dbg->process, (void*)saved_bp_addr[i], &cc, 1, &n);
+        FlushInstructionCache(dbg->process, (void*)saved_bp_addr[i], 1);
     }
 
     if (had_temp_bp)

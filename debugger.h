@@ -4,12 +4,11 @@
 #include <windows.h>
 #include <dbghelp.h>
 
-#define MAX_BREAKPOINTS 16
-
-typedef struct
+typedef struct breakpoint
 {
     void *addr;
     BYTE original_byte;
+    struct breakpoint *next;
 } breakpoint_t;
 
 typedef struct
@@ -22,8 +21,7 @@ typedef struct
     DWORD pid;
     DWORD tid;
 
-    breakpoint_t breakpoints[MAX_BREAKPOINTS];
-    int breakpoint_count;
+    breakpoint_t *breakpoints;
 
     void *breakpoint_addr;
     BYTE original_byte;
