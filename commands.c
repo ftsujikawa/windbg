@@ -7,6 +7,7 @@
 #include "registers.h"
 #include "memory.h"
 #include "symbols.h"
+#include "expr.h"
 
 void command_loop(debugger_t *dbg)
 {
@@ -267,36 +268,59 @@ void command_loop(debugger_t *dbg)
 
         else if (strncmp(line, "set ", 4) == 0)
         {
-            char varname[128];
-            char op;
-            char value_str[128];
+            char lhs[256] = {0};
+            char rhs[256] = {0};
 
-            int n = sscanf(line, "%*s %s %c %127s", varname, &op, value_str);
+            const char *p = line + 4;
+            while (*p == ' ') p++;
 
-            if (n != 3 || op != '=')
+            const char *eq = strchr(p, '=');
+            if (!eq || (eq > p && eq[-1] == '!') ||
+                (eq > p && eq[-1] == '<') ||
+                (eq > p && eq[-1] == '>') ||
+                eq[1] == '=')
             {
-                printf("usage: set <var> = <value>\n");
+                printf("usage: set <lhs> = <expr>\n");
             }
             else
             {
-                long long value = strtoll(value_str, NULL, 0);
-                set_variable(dbg, varname, value);
+                const char *vend = eq - 1;
+                while (vend > p && *vend == ' ') vend--;
+                size_t vlen = (size_t)(vend - p + 1);
+                if (vlen >= sizeof(lhs)) vlen = sizeof(lhs) - 1;
+                strncpy(lhs, p, vlen);
+
+                const char *vstart = eq + 1;
+                while (*vstart == ' ') vstart++;
+                strncpy(rhs, vstart, sizeof(rhs) - 1);
+                char *nl = strchr(rhs, '\n'); if (nl) *nl = '\0';
+                char *cr = strchr(rhs, '\r'); if (cr) *cr = '\0';
+
+                if (lhs[0] == '\0' || rhs[0] == '\0')
+                {
+                    printf("usage: set <lhs> = <expr>\n");
+                }
+                else
+                {
+                    expr_val_t rv = {0};
+                    if (expr_eval(dbg, rhs, &rv) != EVAL_OK)
+                        printf("error: %s\n", rv.errmsg);
+                    else
+                        expr_assign(dbg, lhs, rv.value);
+                }
             }
         }
 
         else if (strncmp(line, "print ", 6) == 0
                  || strncmp(line, "p ", 2) == 0)
         {
-            char varname[256] = {0};
-
-            sscanf(line, "%*s %255[^\n]", varname);
-
-            char *nl = strchr(varname, '\n');
-            if (nl) *nl = '\0';
-            char *cr = strchr(varname, '\r');
-            if (cr) *cr = '\0';
-
-            print_variable(dbg, varname);
+            const char *arg = (line[1] == ' ') ? line + 2 : line + 6;
+            while (*arg == ' ') arg++;
+            char expr_buf[512] = {0};
+            strncpy(expr_buf, arg, sizeof(expr_buf) - 1);
+            char *nl = strchr(expr_buf, '\n'); if (nl) *nl = '\0';
+            char *cr = strchr(expr_buf, '\r'); if (cr) *cr = '\0';
+            expr_print(dbg, expr_buf);
         }
 
         else if (strncmp(line, "up", 2) == 0)

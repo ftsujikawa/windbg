@@ -191,8 +191,9 @@ static DWORD64 resolve_var_addr(
 }
 
 /* SymTagEnum values */
-#define SYM_TAG_UDT       11
-#define SYM_TAG_POINTER   14
+#define SYM_TAG_UDT        11
+#define SYM_TAG_POINTER    14
+#define SYM_TAG_ARRAYTYPE  15
 
 static void print_struct(
     debugger_t *dbg,
@@ -295,6 +296,65 @@ static void print_struct(
     free(params);
 }
 
+static void print_array(
+    debugger_t *dbg,
+    DWORD64 mod_base,
+    DWORD type_id,
+    DWORD64 base_addr,
+    const char *varname)
+{
+    DWORD elem_type_id = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+        TI_GET_TYPEID, &elem_type_id);
+
+    ULONG64 total_len = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+        TI_GET_LENGTH, &total_len);
+
+    ULONG64 elem_len = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, elem_type_id,
+        TI_GET_LENGTH, &elem_len);
+
+    if (elem_len == 0) elem_len = 4;
+
+    DWORD count = (DWORD)(total_len / elem_len);
+
+    DWORD elem_tag = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, elem_type_id,
+        TI_GET_SYMTAG, &elem_tag);
+
+    printf("%s = {\n", varname);
+    for (DWORD i = 0; i < count; i++)
+    {
+        DWORD64 elem_addr = base_addr + i * elem_len;
+        char idx_name[64];
+        snprintf(idx_name, sizeof(idx_name), "[%u]", i);
+
+        if (elem_tag == SYM_TAG_UDT)
+        {
+            printf("  %s = {\n", idx_name);
+            print_struct(dbg, mod_base, elem_type_id, elem_addr,
+                idx_name, 1);
+            printf("  }\n");
+        }
+        else
+        {
+            unsigned long long val = 0;
+            SIZE_T n;
+            ReadProcessMemory(dbg->process, (void*)elem_addr, &val,
+                (SIZE_T)elem_len, &n);
+
+            if (elem_len <= 4)
+                printf("  [%u] = %d (0x%x)\n", i,
+                    (int)val, (unsigned int)val);
+            else
+                printf("  [%u] = %lld (0x%llx)\n", i,
+                    (long long)val, val);
+        }
+    }
+    printf("}\n");
+}
+
 static BOOL find_member(
     debugger_t *dbg,
     DWORD64 mod_base,
@@ -362,36 +422,39 @@ void print_variable(debugger_t *dbg, const char *name)
     int deref   = 0;
     const char *varname = name;
 
-    if (name[0] == '&')
+    while (varname[0] == '*')
+    {
+        deref++;
+        varname++;
+    }
+
+    if (!deref && name[0] == '&')
     {
         addr_of = 1;
-        varname = name + 1;
-    }
-    else if (name[0] == '*')
-    {
-        deref = 1;
         varname = name + 1;
     }
 
     char base_name[128] = {0};
     char member_path[256] = {0};
 
-    const char *dot   = strpbrk(varname, ".->");
-    if (dot && dot[0] == '-' && dot[1] != '>')
-        dot = NULL;
+    const char *sep = strpbrk(varname, ".[- ");
+    while (sep && (sep[0] == ' ' || (sep[0] == '-' && sep[1] != '>')))
+        sep = strpbrk(sep + 1, ".[- ");
 
-    if (dot)
+    if (sep)
     {
-        size_t base_len = (size_t)(dot - varname);
+        size_t base_len = (size_t)(sep - varname);
         if (base_len >= sizeof(base_name))
             base_len = sizeof(base_name) - 1;
         strncpy(base_name, varname, base_len);
         base_name[base_len] = '\0';
 
-        if (dot[0] == '-' && dot[1] == '>')
-            strncpy(member_path, dot + 2, sizeof(member_path) - 1);
+        if (sep[0] == '-' && sep[1] == '>')
+            strncpy(member_path, sep + 2, sizeof(member_path) - 1);
+        else if (sep[0] == '[')
+            strncpy(member_path, sep, sizeof(member_path) - 1);
         else
-            strncpy(member_path, dot + 1, sizeof(member_path) - 1);
+            strncpy(member_path, sep + 1, sizeof(member_path) - 1);
 
         varname = base_name;
     }
@@ -442,8 +505,53 @@ void print_variable(debugger_t *dbg, const char *name)
 
         while (path && path[0] != '\0')
         {
+            DWORD type_tag = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                TI_GET_SYMTAG, &type_tag);
+
+            if (path[0] == '[')
+            {
+                int idx = 0;
+                char *close = strchr(path, ']');
+                if (!close) { printf("syntax error: missing ']'\n"); return; }
+                sscanf(path + 1, "%d", &idx);
+
+                if (type_tag == SYM_TAG_POINTER)
+                {
+                    DWORD pointed = 0;
+                    SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                        TI_GET_TYPEID, &pointed);
+                    cur_type = pointed;
+                    unsigned long long ptr_val = 0;
+                    SIZE_T n;
+                    ReadProcessMemory(dbg->process, (void*)var_addr,
+                        &ptr_val, sizeof(ptr_val), &n);
+                    var_addr = (DWORD64)ptr_val;
+                }
+                else if (type_tag == SYM_TAG_ARRAYTYPE)
+                {
+                    DWORD elem_type = 0;
+                    SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                        TI_GET_TYPEID, &elem_type);
+                    cur_type = elem_type;
+                }
+
+                ULONG64 elem_len = 0;
+                SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                    TI_GET_LENGTH, &elem_len);
+                if (elem_len == 0) elem_len = 4;
+
+                var_addr += (DWORD64)idx * elem_len;
+
+                path = close + 1;
+                if (path[0] == '.') path++;
+                else if (path[0] == '-' && path[1] == '>') path += 2;
+                continue;
+            }
+
             char *next_dot  = strchr(path, '.');
             char *next_arr  = strstr(path, "->");
+            char *next_idx  = strchr(path, '[');
             char *next = NULL;
             int   is_ptr = 0;
 
@@ -454,6 +562,11 @@ void print_variable(debugger_t *dbg, const char *name)
             }
             else if (next_arr) { next = next_arr; is_ptr = 1; }
             else if (next_dot) { next = next_dot; is_ptr = 0; }
+
+            if (next_idx && (!next || next_idx < next))
+            {
+                next = next_idx; is_ptr = 0;
+            }
 
             size_t tlen = next ? (size_t)(next - path) : strlen(path);
             if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
@@ -469,12 +582,6 @@ void print_variable(debugger_t *dbg, const char *name)
                 var_addr = (DWORD64)ptr_val;
             }
 
-            DWORD member_type = 0, member_offset = 0;
-
-            DWORD type_tag = 0;
-            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
-                TI_GET_SYMTAG, &type_tag);
-
             if (type_tag == SYM_TAG_POINTER)
             {
                 DWORD pointed_type = 0;
@@ -489,6 +596,7 @@ void print_variable(debugger_t *dbg, const char *name)
                 var_addr = (DWORD64)ptr_val;
             }
 
+            DWORD member_type = 0, member_offset = 0;
             if (!find_member(dbg, mod_base, cur_type, token,
                     &member_type, &member_offset))
             {
@@ -499,7 +607,18 @@ void print_variable(debugger_t *dbg, const char *name)
             var_addr += member_offset;
             cur_type  = member_type;
 
-            path = next ? (is_ptr ? next + 2 : next + 1) : NULL;
+            if (!next)
+                path = NULL;
+            else if (next == next_idx)
+                path = next;
+            else
+                path = is_ptr ? next + 2 : next + 1;
+        }
+
+        if (addr_of)
+        {
+            printf("%s = 0x%llx\n", name, var_addr);
+            return;
         }
 
         DWORD final_tag = 0;
@@ -515,6 +634,10 @@ void print_variable(debugger_t *dbg, const char *name)
             printf("%s = {\n", name);
             print_struct(dbg, mod_base, cur_type, var_addr, "", 0);
             printf("}\n");
+        }
+        else if (final_tag == SYM_TAG_ARRAYTYPE)
+        {
+            print_array(dbg, mod_base, cur_type, var_addr, name);
         }
         else
         {
@@ -550,6 +673,12 @@ void print_variable(debugger_t *dbg, const char *name)
         return;
     }
 
+    if (!deref && type_tag == SYM_TAG_ARRAYTYPE)
+    {
+        print_array(dbg, mod_base, sym->TypeIndex, var_addr, varname);
+        return;
+    }
+
     ULONG size = (sym->Size > 0 && sym->Size <= 8) ? (ULONG)sym->Size : 4;
 
     unsigned long long value = 0;
@@ -570,28 +699,66 @@ void print_variable(debugger_t *dbg, const char *name)
         else
             printf("%s = %lld (0x%llx)\n", varname,
                 (long long)value, value);
+        return;
     }
-    else
-    {
-        DWORD64 ptr_addr = value;
-        unsigned long long deref_val = 0;
 
-        if (!ReadProcessMemory(
-                dbg->process,
-                (void*)ptr_addr,
-                &deref_val,
-                sizeof(deref_val),
-                &n))
+    DWORD64 deref_addr = var_addr;
+    DWORD   deref_type = cur_type;
+
+    for (int d = 0; d < deref; d++)
+    {
+        DWORD dtag = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+            TI_GET_SYMTAG, &dtag);
+
+        if (dtag != SYM_TAG_POINTER)
         {
-            printf("*%s = ??? (cannot read 0x%llx)\n", varname, ptr_addr);
+            printf("'%s' is not a pointer\n", name);
             return;
         }
 
-        printf("*%s = %lld (0x%llx)  [ptr=0x%llx]\n",
-            varname,
-            (long long)deref_val,
-            deref_val,
-            ptr_addr);
+        DWORD pointed = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+            TI_GET_TYPEID, &pointed);
+        deref_type = pointed;
+
+        unsigned long long ptr_val = 0;
+        SIZE_T rn;
+        ReadProcessMemory(dbg->process, (void*)deref_addr,
+            &ptr_val, sizeof(ptr_val), &rn);
+        deref_addr = (DWORD64)ptr_val;
+    }
+
+    DWORD final_tag = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+        TI_GET_SYMTAG, &final_tag);
+
+    ULONG64 final_len = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+        TI_GET_LENGTH, &final_len);
+
+    if (final_tag == SYM_TAG_UDT)
+    {
+        printf("%s = {\n", name);
+        print_struct(dbg, mod_base, deref_type, deref_addr, "", 0);
+        printf("}\n");
+    }
+    else if (final_tag == SYM_TAG_ARRAYTYPE)
+    {
+        print_array(dbg, mod_base, deref_type, deref_addr, name);
+    }
+    else
+    {
+        ULONG dsz = (ULONG)(final_len > 0 && final_len <= 8 ? final_len : 4);
+        unsigned long long dval = 0;
+        SIZE_T rn;
+        ReadProcessMemory(dbg->process, (void*)deref_addr, &dval, dsz, &rn);
+        if (dsz <= 4)
+            printf("%s = %d (0x%x)\n", name,
+                (int)dval, (unsigned int)dval);
+        else
+            printf("%s = %lld (0x%llx)\n", name,
+                (long long)dval, dval);
     }
 }
 
@@ -711,6 +878,7 @@ void print_backtrace(debugger_t *dbg)
 int set_variable(debugger_t *dbg, const char *name, long long value)
 {
     const char *varname = name;
+    int deref = 0;
 
     if (name[0] == '&')
     {
@@ -718,25 +886,33 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
         return -1;
     }
 
+    while (varname[0] == '*')
+    {
+        deref++;
+        varname++;
+    }
+
     char base_name[128] = {0};
     char member_path[256] = {0};
 
-    const char *dot = strpbrk(varname, ".->");
-    if (dot && dot[0] == '-' && dot[1] != '>')
-        dot = NULL;
+    const char *sep = strpbrk(varname, ".[- ");
+    while (sep && (sep[0] == ' ' || (sep[0] == '-' && sep[1] != '>')))
+        sep = strpbrk(sep + 1, ".[- ");
 
-    if (dot)
+    if (sep)
     {
-        size_t base_len = (size_t)(dot - varname);
+        size_t base_len = (size_t)(sep - varname);
         if (base_len >= sizeof(base_name))
             base_len = sizeof(base_name) - 1;
         strncpy(base_name, varname, base_len);
         base_name[base_len] = '\0';
 
-        if (dot[0] == '-' && dot[1] == '>')
-            strncpy(member_path, dot + 2, sizeof(member_path) - 1);
+        if (sep[0] == '-' && sep[1] == '>')
+            strncpy(member_path, sep + 2, sizeof(member_path) - 1);
+        else if (sep[0] == '[')
+            strncpy(member_path, sep, sizeof(member_path) - 1);
         else
-            strncpy(member_path, dot + 1, sizeof(member_path) - 1);
+            strncpy(member_path, sep + 1, sizeof(member_path) - 1);
 
         varname = base_name;
     }
@@ -788,8 +964,54 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
 
         while (path && path[0] != '\0')
         {
+            DWORD type_tag_s = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                TI_GET_SYMTAG, &type_tag_s);
+
+            if (path[0] == '[')
+            {
+                int idx = 0;
+                char *close = strchr(path, ']');
+                if (!close) { printf("syntax error: missing ']'\n"); return -1; }
+                sscanf(path + 1, "%d", &idx);
+
+                if (type_tag_s == SYM_TAG_POINTER)
+                {
+                    DWORD pointed = 0;
+                    SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                        TI_GET_TYPEID, &pointed);
+                    cur_type = pointed;
+                    unsigned long long ptr_val = 0;
+                    SIZE_T rn;
+                    ReadProcessMemory(dbg->process, (void*)var_addr,
+                        &ptr_val, sizeof(ptr_val), &rn);
+                    var_addr = (DWORD64)ptr_val;
+                }
+                else if (type_tag_s == SYM_TAG_ARRAYTYPE)
+                {
+                    DWORD elem_type = 0;
+                    SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                        TI_GET_TYPEID, &elem_type);
+                    cur_type = elem_type;
+                }
+
+                ULONG64 elem_len = 0;
+                SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                    TI_GET_LENGTH, &elem_len);
+                if (elem_len == 0) elem_len = 4;
+                size = (ULONG)elem_len;
+
+                var_addr += (DWORD64)idx * elem_len;
+
+                path = close + 1;
+                if (path[0] == '.') path++;
+                else if (path[0] == '-' && path[1] == '>') path += 2;
+                continue;
+            }
+
             char *next_dot = strchr(path, '.');
             char *next_arr = strstr(path, "->");
+            char *next_idx = strchr(path, '[');
             char *next = NULL;
             int   is_ptr = 0;
 
@@ -800,6 +1022,11 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
             }
             else if (next_arr) { next = next_arr; is_ptr = 1; }
             else if (next_dot) { next = next_dot; is_ptr = 0; }
+
+            if (next_idx && (!next || next_idx < next))
+            {
+                next = next_idx; is_ptr = 0;
+            }
 
             size_t tlen = next ? (size_t)(next - path) : strlen(path);
             if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
@@ -842,8 +1069,57 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
                 TI_GET_LENGTH, &mlen);
             size = (ULONG)(mlen > 0 && mlen <= 8 ? mlen : 4);
 
-            path = next ? (is_ptr ? next + 2 : next + 1) : NULL;
+            if (!next)
+                path = NULL;
+            else if (next == next_idx)
+                path = next;
+            else
+                path = is_ptr ? next + 2 : next + 1;
         }
+    }
+
+    if (deref > 0)
+    {
+        DWORD deref_type = cur_type;
+        DWORD64 deref_addr = var_addr;
+
+        for (int d = 0; d < deref; d++)
+        {
+            DWORD dtag = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+                TI_GET_SYMTAG, &dtag);
+
+            if (dtag != SYM_TAG_POINTER)
+            {
+                printf("'%s' is not a pointer\n", name);
+                return -1;
+            }
+
+            DWORD pointed = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+                TI_GET_TYPEID, &pointed);
+            deref_type = pointed;
+
+            if (d < deref - 1)
+            {
+                unsigned long long ptr_val = 0;
+                SIZE_T rn;
+                ReadProcessMemory(dbg->process, (void*)deref_addr,
+                    &ptr_val, sizeof(ptr_val), &rn);
+                deref_addr = (DWORD64)ptr_val;
+            }
+        }
+
+        unsigned long long ptr_target = 0;
+        SIZE_T rn;
+        ReadProcessMemory(dbg->process, (void*)deref_addr,
+            &ptr_target, sizeof(ptr_target), &rn);
+        var_addr = (DWORD64)ptr_target;
+
+        ULONG64 dlen = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, deref_type,
+            TI_GET_LENGTH, &dlen);
+        size = (ULONG)(dlen > 0 && dlen <= 8 ? dlen : 4);
     }
 
     unsigned long long write_val = 0;
