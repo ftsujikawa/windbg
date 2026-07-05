@@ -104,7 +104,9 @@ void command_loop(debugger_t *dbg)
             examine_memory(dbg, (void*)addr);
         }
 
-        else if (strncmp(line, "continue", 8) == 0)
+        else if (strncmp(line, "continue", 8) == 0
+                 || strncmp(line, "c\n", 2) == 0
+                 || strncmp(line, "c\r", 2) == 0)
         {
             return;
         }

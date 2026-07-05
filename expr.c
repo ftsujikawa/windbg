@@ -426,12 +426,17 @@ static expr_val_t parse_primary(lex_t *l)
             expr_val_t inner = parse_assign_expr(l);
             if (*inner.errmsg) return inner;
 
-            /* For pointer cast, treat as address (is_lvalue stays as inner) */
             if (is_ptr)
             {
-                inner.byte_size = 8;
-                /* if casting to pointer, value becomes the address */
-                inner.is_lvalue = 0;
+                /* pointer cast: result is the address value, type info cleared */
+                long long ptr_val = inner.is_lvalue ? (long long)inner.addr
+                                                    : inner.value;
+                expr_val_t r = {0};
+                r.is_lvalue = 0;
+                r.value     = ptr_val;
+                r.byte_size = 8;
+                /* type_id left 0 so expr_print treats it as plain integer */
+                return r;
             }
             else
             {
@@ -441,6 +446,7 @@ static expr_val_t parse_primary(lex_t *l)
                 else if (sz == 4) inner.value = (long long)(int)inner.value;
                 inner.byte_size = (ULONG)sz;
                 inner.is_lvalue = 0;
+                inner.type_id   = 0;
             }
             return inner;
         }
