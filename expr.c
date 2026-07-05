@@ -1097,7 +1097,59 @@ static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
     free(p);
 }
 
-void expr_print(debugger_t *dbg, const char *expr_str)
+/* Format a single integer value according to fmt */
+static void print_int_fmt(const char *label, long long value,
+                          ULONG byte_size, print_fmt_t fmt)
+{
+    unsigned long long uv = (unsigned long long)value;
+    switch (fmt)
+    {
+    case FMT_HEX:
+        printf("%s = 0x%llx\n", label, uv);
+        break;
+    case FMT_OCT:
+        printf("%s = 0%llo\n", label, uv);
+        break;
+    case FMT_BIN:
+    {
+        int bits = (byte_size > 0 && byte_size <= 8) ? (int)byte_size * 8 : 64;
+        printf("%s = 0b", label);
+        for (int b = bits - 1; b >= 0; b--)
+            putchar((uv >> b) & 1 ? '1' : '0');
+        printf("\n");
+        break;
+    }
+    case FMT_CHAR:
+        printf("%s = '%c' (%lld)\n", label, (int)(value & 0xff), value);
+        break;
+    case FMT_DEC:
+        if (byte_size <= 4)
+            printf("%s = %d\n", label, (int)value);
+        else
+            printf("%s = %lld\n", label, value);
+        break;
+    default: /* FMT_DEFAULT */
+        if (byte_size <= 4)
+            printf("%s = %d (0x%x)\n", label,
+                   (int)value, (unsigned int)uv);
+        else
+            printf("%s = %lld (0x%llx)\n", label, value, uv);
+        break;
+    }
+}
+
+/* Read a null-terminated string from debuggee memory */
+static void print_string_fmt(debugger_t *dbg, const char *label, DWORD64 addr)
+{
+    if (!addr) { printf("%s = (null)\n", label); return; }
+    char buf[256] = {0};
+    SIZE_T n = 0;
+    ReadProcessMemory(dbg->process, (void*)addr, buf, sizeof(buf)-1, &n);
+    buf[sizeof(buf)-1] = '\0';
+    printf("%s = \"%s\"\n", label, buf);
+}
+
+void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
 {
     expr_val_t v = {0};
     if (expr_eval(dbg, expr_str, &v) != EVAL_OK)
@@ -1106,11 +1158,19 @@ void expr_print(debugger_t *dbg, const char *expr_str)
         return;
     }
 
+    /* /s: treat value as pointer to string */
+    if (fmt == FMT_STR)
+    {
+        print_string_fmt(dbg, expr_str, (DWORD64)v.value);
+        return;
+    }
+
     DWORD tag = 0;
     if (v.mod_base && v.type_id)
         SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id, TI_GET_SYMTAG, &tag);
 
-    if (tag == SYM_TAG_ARRAYTYPE)
+    /* Array: only default format shows struct layout; others flatten to elements */
+    if (tag == SYM_TAG_ARRAYTYPE && fmt == FMT_DEFAULT)
     {
         DWORD elem_type = 0;
         SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id,
@@ -1153,8 +1213,44 @@ void expr_print(debugger_t *dbg, const char *expr_str)
         return;
     }
 
-    print_val(dbg, expr_str, v.mod_base, v.type_id, v.byte_size,
-              v.addr, v.value, 0);
+    /* Array with explicit format: print each element */
+    if (tag == SYM_TAG_ARRAYTYPE)
+    {
+        DWORD elem_type = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id, TI_GET_TYPEID, &elem_type);
+        ULONG64 total = 0, elem_len = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id, TI_GET_LENGTH, &total);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_LENGTH, &elem_len);
+        if (elem_len == 0) elem_len = 4;
+        DWORD count = (DWORD)(total / elem_len);
+        printf("%s = {\n", expr_str);
+        for (DWORD i = 0; i < count; i++)
+        {
+            DWORD64 ea = v.addr + i * elem_len;
+            unsigned long long val = 0; SIZE_T n;
+            ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+            char idx[32]; snprintf(idx, sizeof(idx), "  [%u]", i);
+            print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt);
+        }
+        printf("}\n");
+        return;
+    }
+
+    /* UDT: only default shows struct; explicit fmt prints address */
+    if (tag == SYM_TAG_UDT && fmt == FMT_DEFAULT)
+    {
+        printf("%s = {\n", expr_str);
+        print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1);
+        printf("}\n");
+        return;
+    }
+
+    print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+}
+
+void expr_print(debugger_t *dbg, const char *expr_str)
+{
+    expr_print_fmt(dbg, expr_str, FMT_DEFAULT);
 }
 
 int expr_assign(debugger_t *dbg, const char *lhs, long long value)

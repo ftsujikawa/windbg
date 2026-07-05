@@ -1208,3 +1208,180 @@ void* lookup_symbol(
 
     return (void*)sym->Address;
 }
+
+static const char *sym_tag_name(DWORD tag)
+{
+    switch (tag)
+    {
+    case  2: return "BaseType";
+    case  5: return "Function";
+    case  7: return "Data";
+    case 11: return "UDT (struct/union)";
+    case 12: return "Enum";
+    case 13: return "FunctionType";
+    case 14: return "Pointer";
+    case 15: return "Array";
+    case 16: return "BaseClass";
+    case 17: return "Typedef";
+    default: return "Unknown";
+    }
+}
+
+typedef struct {
+    char         target[256];
+    int          found;
+    char         sym_buf[sizeof(SYMBOL_INFO) + 256];
+} syms_enum_ctx_t;
+
+static BOOL CALLBACK syms_enum_cb(PSYMBOL_INFO si, ULONG size, PVOID ctx)
+{
+    syms_enum_ctx_t *c = (syms_enum_ctx_t *)ctx;
+    fprintf(stderr, "[SYMS] %s\n", si->Name);
+    if (strcmp(si->Name, c->target) == 0)
+    {
+        ULONG copy_size = si->SizeOfStruct + si->MaxNameLen;
+        if (copy_size > sizeof(c->sym_buf)) copy_size = sizeof(c->sym_buf);
+        memcpy(c->sym_buf, si, copy_size);
+        c->found = 1;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void print_symbol_info(debugger_t *dbg, const char *name)
+{
+    CONTEXT ctx = {0};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(dbg->thread, &ctx);
+
+    IMAGEHLP_STACK_FRAME frm = {0};
+    frm.InstructionOffset = ctx.Rip;
+    frm.FrameOffset       = ctx.Rsp;
+    frm.StackOffset       = ctx.Rsp;
+    BOOL sc_ok = SymSetContext(dbg->sym_handle, &frm, NULL);
+    fprintf(stderr, "[SYMS] SymSetContext ok=%d Rip=0x%llx handle=%p\n",
+            sc_ok, (unsigned long long)frm.InstructionOffset,
+            (void*)dbg->sym_handle);
+
+    syms_enum_ctx_t ec = {0};
+    strncpy(ec.target, name, sizeof(ec.target) - 1);
+    BOOL en_ok = SymEnumSymbols(dbg->sym_handle, 0, "*", syms_enum_cb, &ec);
+    fprintf(stderr, "[SYMS] SymEnumSymbols ok=%d found=%d\n", en_ok, ec.found);
+
+    if (!ec.found)
+    {
+        printf("symbol '%s' not found\n", name);
+        return;
+    }
+
+    PSYMBOL_INFO sym = (PSYMBOL_INFO)ec.sym_buf;
+
+    /* Resolve address */
+    DWORD64 addr = resolve_var_addr(dbg, &ctx, sym);
+
+    /* Type info */
+    DWORD64 mod_base = sym->ModBase;
+    DWORD   type_id  = sym->TypeIndex;
+
+    DWORD tag = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, type_id, TI_GET_SYMTAG, &tag);
+
+    ULONG64 byte_len = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, type_id, TI_GET_LENGTH, &byte_len);
+
+    /* For pointer: get pointed-to type tag */
+    DWORD pointed_tag = 0;
+    if (tag == SYM_TAG_POINTER)
+    {
+        DWORD pt = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, type_id, TI_GET_TYPEID, &pt);
+        SymGetTypeInfo(dbg->sym_handle, mod_base, pt, TI_GET_SYMTAG, &pointed_tag);
+    }
+
+    /* UDT name */
+    char udt_name[128] = {0};
+    if (tag == SYM_TAG_UDT)
+    {
+        WCHAR *wn = NULL;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, type_id, TI_GET_SYMNAME, &wn);
+        if (wn)
+        {
+            WideCharToMultiByte(CP_ACP, 0, wn, -1,
+                udt_name, sizeof(udt_name)-1, NULL, NULL);
+            LocalFree(wn);
+        }
+    }
+
+    printf("name    : %s\n", sym->Name);
+    printf("address : 0x%llx\n", (unsigned long long)addr);
+    printf("size    : %llu bytes\n", (unsigned long long)(byte_len ? byte_len : sym->Size));
+    printf("type    : %s (tag=%u)", sym_tag_name(tag), tag);
+    if (udt_name[0]) printf(" [%s]", udt_name);
+    if (tag == SYM_TAG_POINTER)
+        printf(" -> %s (tag=%u)", sym_tag_name(pointed_tag), pointed_tag);
+    printf("\n");
+    printf("flags   : 0x%x", sym->Flags);
+    if (sym->Flags & SYMFLAG_REGREL)  printf(" REGREL(reg=%u,off=%lld)",
+        sym->Register, (long long)(LONG)sym->Address);
+    if (sym->Flags & SYMFLAG_REGISTER) printf(" REGISTER(%u)", sym->Register);
+    printf("\n");
+    printf("type_id : %u  mod_base: 0x%llx\n",
+        type_id, (unsigned long long)mod_base);
+}
+
+typedef struct {
+    const char *filter;   /* NULL or filename substring to filter */
+    char        cur_file_buf[MAX_PATH];
+    int         count;
+} lines_enum_ctx_t;
+
+static BOOL CALLBACK lines_enum_cb(PSRCCODEINFO linfo, PVOID ctx)
+{
+    lines_enum_ctx_t *c = (lines_enum_ctx_t *)ctx;
+
+    /* Apply filename filter */
+    if (c->filter && c->filter[0])
+    {
+        if (!strstr(linfo->FileName, c->filter))
+            return TRUE;
+    }
+
+    /* Print filename header when file changes */
+    if (strcmp(linfo->FileName, c->cur_file_buf) != 0)
+    {
+        strncpy(c->cur_file_buf, linfo->FileName, sizeof(c->cur_file_buf) - 1);
+        printf("\n%s:\n", c->cur_file_buf);
+    }
+
+    printf("  line %-5u  addr 0x%llx\n",
+           linfo->LineNumber,
+           (unsigned long long)linfo->Address);
+    c->count++;
+    return TRUE;
+}
+
+void print_line_info(debugger_t *dbg, const char *filename_filter)
+{
+    CONTEXT ctx = {0};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(dbg->thread, &ctx);
+
+    /* Enumerate all loaded modules to get their base addresses */
+    DWORD64 mod_base = SymGetModuleBase64(dbg->sym_handle, ctx.Rip);
+
+    lines_enum_ctx_t lctx = {0};
+    lctx.filter = (filename_filter && filename_filter[0]) ? filename_filter : NULL;
+
+    BOOL ok = SymEnumLines(dbg->sym_handle, mod_base, NULL, NULL,
+                           lines_enum_cb, &lctx);
+    if (!ok || lctx.count == 0)
+    {
+        printf("no line info found");
+        if (lctx.filter) printf(" for '%s'", lctx.filter);
+        printf("\n");
+    }
+    else
+    {
+        printf("\n%d line(s) found\n", lctx.count);
+    }
+}

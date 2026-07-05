@@ -34,10 +34,23 @@ typedef struct {
     char     errmsg[256];
 } expr_val_t;
 
+typedef enum {
+    FMT_DEFAULT = 0,  /* auto (struct/array/int) */
+    FMT_DEC,          /* /d /i  signed decimal   */
+    FMT_HEX,          /* /x     hex               */
+    FMT_OCT,          /* /o     octal             */
+    FMT_BIN,          /* /t     binary            */
+    FMT_CHAR,         /* /c     character         */
+    FMT_STR           /* /s     null-term string  */
+} print_fmt_t;
+
 /* Evaluate expression string, return EVAL_OK on success */
 eval_status_t expr_eval(debugger_t *dbg, const char *expr, expr_val_t *out);
 
-/* Print result (like p command) */
+/* Print result with optional format specifier */
+void expr_print_fmt(debugger_t *dbg, const char *expr, print_fmt_t fmt);
+
+/* Print result (like p command) - default format */
 void expr_print(debugger_t *dbg, const char *expr);
 
 /* Write value to lvalue result (like set command) */

@@ -111,15 +111,14 @@ void command_loop(debugger_t *dbg)
             return;
         }
 
-        else if (strncmp(line,"sym",3)==0)
+        else if (strncmp(line,"syms ",5)==0)
         {
-            char name[128];
-
-            sscanf(line,"sym %s",name);
-
-            printf("name = %s\n",name);
-
-            lookup_symbol(dbg,name);
+            char name[128] = {0};
+            sscanf(line, "syms %127s", name);
+            if (name[0])
+                print_symbol_info(dbg, name);
+            else
+                printf("usage: syms <name>\n");
         }
 
         else if ((line[0] == 's' && (line[1] == '\n' || line[1] == '\0'))
@@ -306,23 +305,58 @@ void command_loop(debugger_t *dbg)
                 {
                     expr_val_t rv = {0};
                     if (expr_eval(dbg, rhs, &rv) != EVAL_OK)
+                    {
                         printf("error: %s\n", rv.errmsg);
+                    }
                     else
-                        expr_assign(dbg, lhs, rv.value);
+                    {
+                        /* Try register first, fall back to variable */
+                        if (!set_register(dbg, lhs, rv.value))
+                            expr_assign(dbg, lhs, rv.value);
+                    }
                 }
             }
         }
 
-        else if (strncmp(line, "print ", 6) == 0
-                 || strncmp(line, "p ", 2) == 0)
+        else if (strncmp(line, "print", 5) == 0
+                 || line[0] == 'p')
         {
-            const char *arg = (line[1] == ' ') ? line + 2 : line + 6;
+            /* Determine start of "p" or "print" token, then look for /fmt */
+            const char *cmd_end = (line[0] == 'p' && line[1] != 'r')
+                                  ? line + 1 : line + 5;
+
+            print_fmt_t fmt = FMT_DEFAULT;
+            const char *arg = cmd_end;
+
+            /* Skip spaces, then check for /fmt specifier */
             while (*arg == ' ') arg++;
-            char expr_buf[512] = {0};
-            strncpy(expr_buf, arg, sizeof(expr_buf) - 1);
-            char *nl = strchr(expr_buf, '\n'); if (nl) *nl = '\0';
-            char *cr = strchr(expr_buf, '\r'); if (cr) *cr = '\0';
-            expr_print(dbg, expr_buf);
+
+            if (*arg == '/')
+            {
+                arg++; /* skip '/' */
+                switch (*arg)
+                {
+                case 'd': case 'i': fmt = FMT_DEC;  arg++; break;
+                case 'x': case 'X': fmt = FMT_HEX;  arg++; break;
+                case 'o':           fmt = FMT_OCT;  arg++; break;
+                case 't':           fmt = FMT_BIN;  arg++; break;
+                case 'c':           fmt = FMT_CHAR; arg++; break;
+                case 's':           fmt = FMT_STR;  arg++; break;
+                default: break;
+                }
+                while (*arg == ' ') arg++;
+            }
+
+            {
+                char expr_buf[512] = {0};
+                strncpy(expr_buf, arg, sizeof(expr_buf) - 1);
+                char *nl = strchr(expr_buf, '\n'); if (nl) *nl = '\0';
+                char *cr = strchr(expr_buf, '\r'); if (cr) *cr = '\0';
+                if (expr_buf[0])
+                    expr_print_fmt(dbg, expr_buf, fmt);
+                else
+                    printf("usage: p[/fmt] <expr>\n");
+            }
         }
 
         else if (strncmp(line, "up", 2) == 0)
@@ -424,6 +458,19 @@ void command_loop(debugger_t *dbg)
             print_backtrace(dbg);
         }
 
+        else if (strncmp(line, "lines", 5) == 0)
+        {
+            char filter[256] = {0};
+            /* optional filename filter after "lines " */
+            if (line[5] == ' ')
+            {
+                strncpy(filter, line + 6, sizeof(filter) - 1);
+                char *nl = strchr(filter, '\n'); if (nl) *nl = '\0';
+                char *cr = strchr(filter, '\r'); if (cr) *cr = '\0';
+            }
+            print_line_info(dbg, filter);
+        }
+
         else if (strncmp(line, "run", 3) == 0)
         {
             if (dbg->target_program[0] == '\0')
@@ -441,6 +488,17 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line, "quit", 4) == 0)
         {
             exit(0);
+        }
+
+        else
+        {
+            /* strip trailing newline for display */
+            char cmd[64] = {0};
+            strncpy(cmd, line, sizeof(cmd) - 1);
+            char *nl = strchr(cmd, '\n'); if (nl) *nl = '\0';
+            char *cr = strchr(cmd, '\r'); if (cr) *cr = '\0';
+            if (cmd[0] != '\0')
+                printf("unknown command: '%s'\n", cmd);
         }
     }
 }

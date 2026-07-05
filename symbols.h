@@ -60,4 +60,14 @@ int set_variable(
     long long value
 );
 
+void print_symbol_info(
+    debugger_t *dbg,
+    const char *name
+);
+
+void print_line_info(
+    debugger_t *dbg,
+    const char *filename_filter
+);
+
 #endif
