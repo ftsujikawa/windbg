@@ -1017,41 +1017,124 @@ eval_status_t expr_eval(debugger_t *dbg, const char *expr, expr_val_t *out)
 /* ------------------------------------------------------------------ */
 /* Print helpers (same style as original print_variable)              */
 /* ------------------------------------------------------------------ */
+static void print_int_fmt(const char *label, long long value,
+                          ULONG byte_size, print_fmt_t fmt);
+
 static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
-                             DWORD64 base_addr, int depth);
+                             DWORD64 base_addr, int depth, print_fmt_t fmt);
 
 static void print_val(debugger_t *dbg, const char *label,
                       DWORD64 modbase, DWORD type_id, ULONG byte_size,
-                      DWORD64 addr, long long value, int depth)
+                      DWORD64 addr, long long value, int depth, print_fmt_t fmt)
 {
     DWORD tag = 0;
     SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMTAG, &tag);
 
-    char indent[32] = {0};
-    for (int i = 0; i < depth && i < 15; i++) indent[i] = ' ', indent[i+1] = ' ';
+    char indent[64] = {0};
+    for (int i = 0; i < depth && i < 30; i++) { indent[i*2] = ' '; indent[i*2+1] = ' '; }
 
     if (tag == SYM_TAG_UDT)
     {
         printf("%s%s = {\n", indent, label);
-        print_struct_ex(dbg, modbase, type_id, addr, depth + 1);
+        print_struct_ex(dbg, modbase, type_id, addr, depth + 1, fmt);
         printf("%s}\n", indent);
         return;
     }
     if (tag == SYM_TAG_POINTER)
     {
-        printf("%s%s = 0x%llx\n", indent, label, (unsigned long long)value);
+        /* Check if it's a char* and show string after address */
+        DWORD pt_type = 0;
+        SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_TYPEID, &pt_type);
+        DWORD resolved = pt_type;
+        for (int di = 0; di < 8; di++)
+        {
+            DWORD rtag = 0;
+            SymGetTypeInfo(dbg->sym_handle, modbase, resolved, TI_GET_SYMTAG, &rtag);
+            if (rtag == SYM_TAG_BASETYPE) break;
+            DWORD inner = 0;
+            if (!SymGetTypeInfo(dbg->sym_handle, modbase, resolved, TI_GET_TYPEID, &inner)
+                || inner == 0 || inner == resolved) break;
+            resolved = inner;
+        }
+        DWORD pt_tag = 0;
+        ULONG64 pt_len = 0;
+        DWORD pt_basetype = 0;
+        SymGetTypeInfo(dbg->sym_handle, modbase, resolved, TI_GET_SYMTAG,   &pt_tag);
+        SymGetTypeInfo(dbg->sym_handle, modbase, resolved, TI_GET_LENGTH,   &pt_len);
+        SymGetTypeInfo(dbg->sym_handle, modbase, resolved, TI_GET_BASETYPE, &pt_basetype);
+        ULONG64 orig_len2 = 0;
+        SymGetTypeInfo(dbg->sym_handle, modbase, pt_type, TI_GET_LENGTH, &orig_len2);
+        int is_char_ptr = ((pt_tag == SYM_TAG_BASETYPE &&
+                            (pt_basetype == 3 || pt_basetype == 5)) ||
+                           (pt_len == 1) ||
+                           (orig_len2 == 1));
+        char ilabel[256];
+        snprintf(ilabel, sizeof(ilabel), "%s%s", indent, label);
+        if (is_char_ptr && fmt != FMT_HEX && fmt != FMT_DEC &&
+            fmt != FMT_OCT && fmt != FMT_BIN)
+        {
+            /* Show address + string content */
+            char strbuf[256] = {0};
+            SIZE_T nr = 0;
+            if (value)
+                ReadProcessMemory(dbg->process, (void*)(DWORD64)value,
+                                  strbuf, sizeof(strbuf)-1, &nr);
+            strbuf[sizeof(strbuf)-1] = '\0';
+            printf("%s = 0x%llx \"%s\"\n", ilabel,
+                   (unsigned long long)value, value ? strbuf : "");
+        }
+        else if (fmt == FMT_DEFAULT || fmt == FMT_HEX)
+            printf("%s = 0x%llx\n", ilabel, (unsigned long long)value);
+        else
+            print_int_fmt(ilabel, value, byte_size, fmt);
         return;
     }
-    if (byte_size <= 4)
-        printf("%s%s = %d (0x%x)\n", indent, label,
-               (int)value, (unsigned int)(unsigned long long)value);
-    else
-        printf("%s%s = %lld (0x%llx)\n", indent, label,
-               value, (unsigned long long)value);
+    {
+        /* Check if this is a char type (btChar=3 or size-1 basetype) */
+        DWORD scalar_tag = 0, scalar_basetype = 0;
+        ULONG64 scalar_len = 0;
+        DWORD resolved_id = type_id;
+        for (int di = 0; di < 8; di++)
+        {
+            SymGetTypeInfo(dbg->sym_handle, modbase, resolved_id, TI_GET_SYMTAG, &scalar_tag);
+            if (scalar_tag == SYM_TAG_BASETYPE) break;
+            DWORD inner = 0;
+            if (!SymGetTypeInfo(dbg->sym_handle, modbase, resolved_id, TI_GET_TYPEID, &inner)
+                || inner == 0 || inner == resolved_id) break;
+            resolved_id = inner;
+        }
+        SymGetTypeInfo(dbg->sym_handle, modbase, resolved_id, TI_GET_BASETYPE, &scalar_basetype);
+        SymGetTypeInfo(dbg->sym_handle, modbase, resolved_id, TI_GET_LENGTH,   &scalar_len);
+        int is_char = (scalar_tag == SYM_TAG_BASETYPE &&
+                       (scalar_basetype == 3 ||
+                        (scalar_len == 1 && (scalar_basetype == 6 || scalar_basetype == 7))));
+        if (!is_char)
+        {
+            ULONG64 orig_len3 = 0;
+            SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_LENGTH, &orig_len3);
+            if (orig_len3 == 1) is_char = 1;
+        }
+
+        char ilabel[256];
+        snprintf(ilabel, sizeof(ilabel), "%s%s", indent, label);
+        if (fmt == FMT_DEFAULT)
+        {
+            if (is_char)
+                printf("%s = %d '%c'\n", ilabel, (int)(value & 0xff), (int)(value & 0xff));
+            else if (byte_size <= 4)
+                printf("%s = %d (0x%x)\n", ilabel,
+                       (int)value, (unsigned int)(unsigned long long)value);
+            else
+                printf("%s = %lld (0x%llx)\n", ilabel,
+                       value, (unsigned long long)value);
+        }
+        else
+            print_int_fmt(ilabel, value, byte_size, fmt);
+    }
 }
 
 static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
-                             DWORD64 base_addr, int depth)
+                             DWORD64 base_addr, int depth, print_fmt_t fmt)
 {
     if (depth > 5) return;
 
@@ -1092,7 +1175,7 @@ static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
         ReadProcessMemory(dbg->process, (void*)member_addr, &val, (SIZE_T)child_len, &n);
 
         print_val(dbg, aname, modbase, child_type, (ULONG)child_len,
-                  member_addr, (long long)val, depth);
+                  member_addr, (long long)val, depth, fmt);
     }
     free(p);
 }
@@ -1196,7 +1279,7 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
             if (elem_tag == SYM_TAG_UDT)
             {
                 printf("  %s = {\n", idx);
-                print_struct_ex(dbg, v.mod_base, elem_type, ea, 2);
+                print_struct_ex(dbg, v.mod_base, elem_type, ea, 2, FMT_DEFAULT);
                 printf("  }\n");
             }
             else
@@ -1236,16 +1319,97 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         return;
     }
 
-    /* UDT: only default shows struct; explicit fmt prints address */
-    if (tag == SYM_TAG_UDT && fmt == FMT_DEFAULT)
+    /* UDT: always show struct members, apply fmt to each member value */
+    if (tag == SYM_TAG_UDT)
     {
         printf("%s = {\n", expr_str);
-        print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1);
+        print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);
         printf("}\n");
         return;
     }
 
-    print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+    /* Pointer: check for char* and show string */
+    if (tag == SYM_TAG_POINTER)
+    {
+        DWORD pt_type = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id, TI_GET_TYPEID, &pt_type);
+
+        /* Resolve typedef/alias chain: follow TI_GET_TYPEID until BaseType or dead end */
+        DWORD resolved = pt_type;
+        for (int depth2 = 0; depth2 < 8; depth2++)
+        {
+            DWORD rtag = 0;
+            SymGetTypeInfo(dbg->sym_handle, v.mod_base, resolved, TI_GET_SYMTAG, &rtag);
+            if (rtag == SYM_TAG_BASETYPE) break;
+            DWORD inner = 0;
+            if (!SymGetTypeInfo(dbg->sym_handle, v.mod_base, resolved, TI_GET_TYPEID, &inner)
+                || inner == 0 || inner == resolved) break;
+            resolved = inner;
+        }
+
+        DWORD pt_tag = 0;
+        ULONG64 pt_len = 0;
+        DWORD pt_basetype = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, resolved, TI_GET_SYMTAG,   &pt_tag);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, resolved, TI_GET_LENGTH,   &pt_len);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, resolved, TI_GET_BASETYPE, &pt_basetype);
+
+        /* Also check the original pt_type length in case chain did not resolve fully */
+        ULONG64 orig_len = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, pt_type, TI_GET_LENGTH, &orig_len);
+
+        /* char* if resolved BaseType with btChar/btWChar, or if pointed-to size is 1 */
+        int is_char_ptr = ((pt_tag == SYM_TAG_BASETYPE &&
+                            (pt_basetype == 3 || pt_basetype == 5)) ||
+                           (pt_len == 1) ||
+                           (orig_len == 1));
+
+        if (is_char_ptr && fmt != FMT_HEX && fmt != FMT_DEC &&
+            fmt != FMT_OCT && fmt != FMT_BIN)
+        {
+            char strbuf[256] = {0};
+            SIZE_T nr = 0;
+            if (v.value)
+                ReadProcessMemory(dbg->process, (void*)(DWORD64)v.value,
+                                  strbuf, sizeof(strbuf)-1, &nr);
+            strbuf[sizeof(strbuf)-1] = '\0';
+            printf("%s = 0x%llx \"%s\"\n", expr_str,
+                   (unsigned long long)v.value, v.value ? strbuf : "");
+        }
+        else if (fmt == FMT_DEFAULT || fmt == FMT_HEX)
+            printf("%s = 0x%llx\n", expr_str, (unsigned long long)v.value);
+        else
+            print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+        return;
+    }
+
+    /* Scalar: check if char type and append character */
+    {
+        DWORD sc_tag = 0, sc_basetype = 0;
+        ULONG64 sc_len = 0;
+        DWORD sc_id = v.type_id;
+        for (int di = 0; di < 8 && v.mod_base && sc_id; di++)
+        {
+            SymGetTypeInfo(dbg->sym_handle, v.mod_base, sc_id, TI_GET_SYMTAG, &sc_tag);
+            if (sc_tag == SYM_TAG_BASETYPE) break;
+            DWORD inner = 0;
+            if (!SymGetTypeInfo(dbg->sym_handle, v.mod_base, sc_id, TI_GET_TYPEID, &inner)
+                || inner == 0 || inner == sc_id) break;
+            sc_id = inner;
+        }
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, sc_id, TI_GET_BASETYPE, &sc_basetype);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, sc_id, TI_GET_LENGTH,   &sc_len);
+        int is_char = (sc_tag == SYM_TAG_BASETYPE &&
+                       (sc_basetype == 3 ||
+                        (sc_len == 1 && (sc_basetype == 6 || sc_basetype == 7))));
+        if (!is_char && v.byte_size == 1) is_char = 1;
+
+        if (is_char && fmt == FMT_DEFAULT)
+            printf("%s = %d '%c'\n", expr_str,
+                   (int)(v.value & 0xff), (int)(v.value & 0xff));
+        else
+            print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+    }
 }
 
 void expr_print(debugger_t *dbg, const char *expr_str)

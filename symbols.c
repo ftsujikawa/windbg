@@ -846,10 +846,13 @@ void print_backtrace(debugger_t *dbg)
         char symbol_name[256] = "???";
         DWORD64 disp = 0;
 
+        int is_main = 0;
         if (SymFromAddr(dbg->sym_handle, addr, &disp, sym))
         {
             snprintf(symbol_name, sizeof(symbol_name),
                 "%s+0x%llx", sym->Name, disp);
+            if (strcmp(sym->Name, "main") == 0)
+                is_main = 1;
         }
 
         IMAGEHLP_LINE64 line = {0};
@@ -872,6 +875,9 @@ void print_backtrace(debugger_t *dbg)
 
         printf("#%2d 0x%llx %s%s\n",
             i, addr, symbol_name, file_info);
+
+        if (is_main)
+            break;
     }
 }
 

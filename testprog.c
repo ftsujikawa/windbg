@@ -5,6 +5,13 @@ struct test_struct {
     int b;
 };
 
+struct test2_struct
+{
+    int x;
+    int y;
+    struct test_struct z;
+};
+
 int add(int a, int b)
 {
     return a + b;
@@ -17,6 +24,9 @@ int main()
     int a[5] = {1, 2, 3, 4, 5};
     struct test_struct *ps = &s;
     struct test_struct sa[3] = {{1, 2}, {3, 4}, {5, 6}};
+    struct test2_struct t2s = {10, 20, {30, 40}};
+    struct test2_struct a2s[2] = {{10, 20, {30, 40}}, {50, 60, {70, 80}}};
+    char *str = "Hello, World!";
     
     printf("hello\n");
 
