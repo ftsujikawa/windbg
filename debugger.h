@@ -43,8 +43,11 @@ typedef struct
     char list_file[512];
     DWORD list_next_line;
 
+    char target_program[512];
+
 } debugger_t;
 int debugger_start(debugger_t *dbg, const char *program);
 void debugger_loop(debugger_t *dbg);
+void debugger_restart(debugger_t *dbg);
 
 #endif

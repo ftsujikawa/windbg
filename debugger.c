@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "debugger.h"
 #include "breakpoints.h"
 #include "commands.h"
@@ -36,9 +38,40 @@ int debugger_start(debugger_t *dbg, const char *program)
     dbg->tid = pi.dwThreadId;
     dbg->sym_handle = GetCurrentProcess();
 
+    strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);
+
     printf("started pid=%lu\n", dbg->pid);
 
     return 0;
+}
+
+void debugger_restart(debugger_t *dbg)
+{
+    char program[512];
+    strncpy(program, dbg->target_program, sizeof(program) - 1);
+
+    breakpoint_t *bp = dbg->breakpoints;
+    while (bp != NULL)
+    {
+        breakpoint_t *next = bp->next;
+        free(bp);
+        bp = next;
+    }
+
+    if (dbg->sym_handle)
+        SymCleanup(dbg->sym_handle);
+
+    memset(dbg, 0, sizeof(debugger_t));
+
+    strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);
+
+    if (debugger_start(dbg, program) < 0)
+    {
+        printf("failed to restart\n");
+        return;
+    }
+
+    debugger_loop(dbg);
 }
 
 void debugger_loop(debugger_t *dbg)
@@ -260,7 +293,17 @@ void debugger_loop(debugger_t *dbg)
 
             case EXIT_PROCESS_DEBUG_EVENT:
 
-                printf("process exited\n");
+                printf("process exited with code %lu\n",
+                    ev.u.ExitProcess.dwExitCode);
+
+                ContinueDebugEvent(
+                    ev.dwProcessId,
+                    ev.dwThreadId,
+                    DBG_CONTINUE
+                );
+
+                printf("(mini-gdb) process has exited. type 'quit' to exit.\n");
+                command_loop(dbg);
                 return;
         }
 

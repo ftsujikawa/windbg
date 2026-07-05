@@ -287,9 +287,14 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line, "print ", 6) == 0
                  || strncmp(line, "p ", 2) == 0)
         {
-            char varname[128];
+            char varname[256] = {0};
 
-            sscanf(line, "%*s %s", varname);
+            sscanf(line, "%*s %255[^\n]", varname);
+
+            char *nl = strchr(varname, '\n');
+            if (nl) *nl = '\0';
+            char *cr = strchr(varname, '\r');
+            if (cr) *cr = '\0';
 
             print_variable(dbg, varname);
         }
@@ -391,6 +396,20 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line, "tb", 2) == 0)
         {
             print_backtrace(dbg);
+        }
+
+        else if (strncmp(line, "run", 3) == 0)
+        {
+            if (dbg->target_program[0] == '\0')
+            {
+                printf("no target program\n");
+            }
+            else
+            {
+                printf("restarting %s\n", dbg->target_program);
+                debugger_restart(dbg);
+                return;
+            }
         }
 
         else if (strncmp(line, "quit", 4) == 0)

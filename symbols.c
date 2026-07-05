@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <windows.h>
 #include <dbghelp.h>
 
@@ -189,6 +190,172 @@ static DWORD64 resolve_var_addr(
     }
 }
 
+/* SymTagEnum values */
+#define SYM_TAG_UDT       11
+#define SYM_TAG_POINTER   14
+
+static void print_struct(
+    debugger_t *dbg,
+    DWORD64 mod_base,
+    DWORD type_id,
+    DWORD64 base_addr,
+    const char *prefix,
+    int depth)
+{
+    if (depth > 4)
+        return;
+
+    DWORD child_count = 0;
+    BOOL cc_ok = SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+        TI_GET_CHILDRENCOUNT, &child_count);
+
+    fprintf(stderr, "[debug] print_struct mod_base=0x%llx type_id=%u cc_ok=%d child_count=%u\n",
+        mod_base, type_id, cc_ok, child_count);
+
+    if (child_count == 0)
+        return;
+
+    DWORD buf_size = sizeof(TI_FINDCHILDREN_PARAMS) + child_count * sizeof(ULONG);
+    TI_FINDCHILDREN_PARAMS *params = (TI_FINDCHILDREN_PARAMS*)malloc(buf_size);
+    if (!params)
+        return;
+
+    memset(params, 0, buf_size);
+    params->Count = child_count;
+    params->Start = 0;
+
+    if (!SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, type_id,
+            TI_FINDCHILDREN, params))
+    {
+        free(params);
+        return;
+    }
+
+    for (DWORD i = 0; i < child_count; i++)
+    {
+        ULONG child_id = params->ChildId[i];
+
+        WCHAR *name_w = NULL;
+        char member_name[256] = {0};
+        if (SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, child_id,
+                TI_GET_SYMNAME, &name_w) && name_w)
+        {
+            WideCharToMultiByte(CP_ACP, 0, name_w, -1,
+                member_name, sizeof(member_name), NULL, NULL);
+            LocalFree(name_w);
+        }
+
+        DWORD offset = 0;
+        SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, child_id,
+            TI_GET_OFFSET, &offset);
+
+        ULONG64 length = 0;
+        SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, child_id,
+            TI_GET_LENGTH, &length);
+
+        DWORD child_type_id = 0;
+        SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, child_id,
+            TI_GET_TYPEID, &child_type_id);
+
+        DWORD child_tag = 0;
+        SymGetTypeInfo(dbg->sym_handle, (DWORD64)mod_base, child_type_id,
+            TI_GET_SYMTAG, &child_tag);
+
+        char full_name[512];
+        if (prefix[0])
+            snprintf(full_name, sizeof(full_name), "%s.%s", prefix, member_name);
+        else
+            snprintf(full_name, sizeof(full_name), "%s", member_name);
+
+        DWORD64 member_addr = base_addr + offset;
+
+        if (child_tag == SYM_TAG_UDT)
+        {
+            printf("%s = {\n", full_name);
+            print_struct(dbg, mod_base, child_type_id, member_addr,
+                full_name, depth + 1);
+            printf("}\n");
+        }
+        else
+        {
+            ULONG sz = (ULONG)(length > 0 && length <= 8 ? length : 4);
+            unsigned long long val = 0;
+            SIZE_T n;
+            ReadProcessMemory(dbg->process, (void*)member_addr, &val, sz, &n);
+
+            if (sz <= 4)
+                printf("  %s = %d (0x%x)\n", full_name,
+                    (int)val, (unsigned int)val);
+            else
+                printf("  %s = %lld (0x%llx)\n", full_name,
+                    (long long)val, val);
+        }
+    }
+
+    free(params);
+}
+
+static BOOL find_member(
+    debugger_t *dbg,
+    DWORD64 mod_base,
+    DWORD type_id,
+    const char *member_name,
+    DWORD *out_type_id,
+    DWORD *out_offset)
+{
+    DWORD child_count = 0;
+    if (!SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+            TI_GET_CHILDRENCOUNT, &child_count) || child_count == 0)
+        return FALSE;
+
+    DWORD buf_size = sizeof(TI_FINDCHILDREN_PARAMS) + child_count * sizeof(ULONG);
+    TI_FINDCHILDREN_PARAMS *params = (TI_FINDCHILDREN_PARAMS*)malloc(buf_size);
+    if (!params)
+        return FALSE;
+
+    memset(params, 0, buf_size);
+    params->Count = child_count;
+
+    if (!SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+            TI_FINDCHILDREN, params))
+    {
+        free(params);
+        return FALSE;
+    }
+
+    for (DWORD i = 0; i < child_count; i++)
+    {
+        ULONG child_id = params->ChildId[i];
+
+        WCHAR *name_w = NULL;
+        char mname[256] = {0};
+        if (SymGetTypeInfo(dbg->sym_handle, mod_base, child_id,
+                TI_GET_SYMNAME, &name_w) && name_w)
+        {
+            WideCharToMultiByte(CP_ACP, 0, name_w, -1,
+                mname, sizeof(mname), NULL, NULL);
+            LocalFree(name_w);
+        }
+
+        if (strcmp(mname, member_name) == 0)
+        {
+            DWORD offset = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, child_id,
+                TI_GET_OFFSET, &offset);
+            DWORD child_type_id = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, child_id,
+                TI_GET_TYPEID, &child_type_id);
+            *out_type_id = child_type_id;
+            *out_offset  = offset;
+            free(params);
+            return TRUE;
+        }
+    }
+
+    free(params);
+    return FALSE;
+}
+
 void print_variable(debugger_t *dbg, const char *name)
 {
     int addr_of = 0;
@@ -204,6 +371,29 @@ void print_variable(debugger_t *dbg, const char *name)
     {
         deref = 1;
         varname = name + 1;
+    }
+
+    char base_name[128] = {0};
+    char member_path[256] = {0};
+
+    const char *dot   = strpbrk(varname, ".->");
+    if (dot && dot[0] == '-' && dot[1] != '>')
+        dot = NULL;
+
+    if (dot)
+    {
+        size_t base_len = (size_t)(dot - varname);
+        if (base_len >= sizeof(base_name))
+            base_len = sizeof(base_name) - 1;
+        strncpy(base_name, varname, base_len);
+        base_name[base_len] = '\0';
+
+        if (dot[0] == '-' && dot[1] == '>')
+            strncpy(member_path, dot + 2, sizeof(member_path) - 1);
+        else
+            strncpy(member_path, dot + 1, sizeof(member_path) - 1);
+
+        varname = base_name;
     }
 
     CONTEXT ctx = {0};
@@ -242,10 +432,121 @@ void print_variable(debugger_t *dbg, const char *name)
     }
 
     DWORD64 var_addr = resolve_var_addr(dbg, &ctx, sym);
+    DWORD64 mod_base = sym->ModBase;
+    DWORD   cur_type = sym->TypeIndex;
+
+    if (member_path[0] != '\0')
+    {
+        char *path = member_path;
+        char token[128];
+
+        while (path && path[0] != '\0')
+        {
+            char *next_dot  = strchr(path, '.');
+            char *next_arr  = strstr(path, "->");
+            char *next = NULL;
+            int   is_ptr = 0;
+
+            if (next_dot && next_arr)
+            {
+                if (next_arr < next_dot) { next = next_arr; is_ptr = 1; }
+                else                     { next = next_dot; is_ptr = 0; }
+            }
+            else if (next_arr) { next = next_arr; is_ptr = 1; }
+            else if (next_dot) { next = next_dot; is_ptr = 0; }
+
+            size_t tlen = next ? (size_t)(next - path) : strlen(path);
+            if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
+            strncpy(token, path, tlen);
+            token[tlen] = '\0';
+
+            if (is_ptr)
+            {
+                unsigned long long ptr_val = 0;
+                SIZE_T n;
+                ReadProcessMemory(dbg->process, (void*)var_addr,
+                    &ptr_val, sizeof(ptr_val), &n);
+                var_addr = (DWORD64)ptr_val;
+            }
+
+            DWORD member_type = 0, member_offset = 0;
+
+            DWORD type_tag = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                TI_GET_SYMTAG, &type_tag);
+
+            if (type_tag == SYM_TAG_POINTER)
+            {
+                DWORD pointed_type = 0;
+                SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                    TI_GET_TYPEID, &pointed_type);
+                cur_type = pointed_type;
+
+                unsigned long long ptr_val = 0;
+                SIZE_T n;
+                ReadProcessMemory(dbg->process, (void*)var_addr,
+                    &ptr_val, sizeof(ptr_val), &n);
+                var_addr = (DWORD64)ptr_val;
+            }
+
+            if (!find_member(dbg, mod_base, cur_type, token,
+                    &member_type, &member_offset))
+            {
+                printf("member '%s' not found\n", token);
+                return;
+            }
+
+            var_addr += member_offset;
+            cur_type  = member_type;
+
+            path = next ? (is_ptr ? next + 2 : next + 1) : NULL;
+        }
+
+        DWORD final_tag = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+            TI_GET_SYMTAG, &final_tag);
+
+        ULONG64 length = 0;
+        SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+            TI_GET_LENGTH, &length);
+
+        if (final_tag == SYM_TAG_UDT)
+        {
+            printf("%s = {\n", name);
+            print_struct(dbg, mod_base, cur_type, var_addr, "", 0);
+            printf("}\n");
+        }
+        else
+        {
+            ULONG sz = (ULONG)(length > 0 && length <= 8 ? length : 4);
+            unsigned long long val = 0;
+            SIZE_T n;
+            ReadProcessMemory(dbg->process, (void*)var_addr, &val, sz, &n);
+            if (sz <= 4)
+                printf("%s = %d (0x%x)\n", name,
+                    (int)val, (unsigned int)val);
+            else
+                printf("%s = %lld (0x%llx)\n", name,
+                    (long long)val, val);
+        }
+        return;
+    }
 
     if (addr_of)
     {
         printf("&%s = 0x%llx\n", varname, var_addr);
+        return;
+    }
+
+    DWORD type_tag = 0;
+    SymGetTypeInfo(dbg->sym_handle, mod_base, sym->TypeIndex,
+        TI_GET_SYMTAG, &type_tag);
+
+    if (!deref && type_tag == SYM_TAG_UDT)
+    {
+        printf("%s = {\n", varname);
+        print_struct(dbg, mod_base, sym->TypeIndex, var_addr, "", 0);
+        printf("}\n");
         return;
     }
 
@@ -417,12 +718,37 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
         return -1;
     }
 
+    char base_name[128] = {0};
+    char member_path[256] = {0};
+
+    const char *dot = strpbrk(varname, ".->");
+    if (dot && dot[0] == '-' && dot[1] != '>')
+        dot = NULL;
+
+    if (dot)
+    {
+        size_t base_len = (size_t)(dot - varname);
+        if (base_len >= sizeof(base_name))
+            base_len = sizeof(base_name) - 1;
+        strncpy(base_name, varname, base_len);
+        base_name[base_len] = '\0';
+
+        if (dot[0] == '-' && dot[1] == '>')
+            strncpy(member_path, dot + 2, sizeof(member_path) - 1);
+        else
+            strncpy(member_path, dot + 1, sizeof(member_path) - 1);
+
+        varname = base_name;
+    }
+
     CONTEXT ctx = {0};
     ctx.ContextFlags = CONTEXT_FULL;
     GetThreadContext(dbg->thread, &ctx);
 
     IMAGEHLP_STACK_FRAME img_frame = {0};
     img_frame.InstructionOffset = ctx.Rip;
+    img_frame.FrameOffset = ctx.Rsp;
+    img_frame.StackOffset = ctx.Rsp;
 
     SymSetContext(dbg->sym_handle, &img_frame, NULL);
 
@@ -451,7 +777,74 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
     }
 
     DWORD64 var_addr = resolve_var_addr(dbg, &ctx, sym);
-    ULONG size = (sym->Size > 0 && sym->Size <= 8) ? (ULONG)sym->Size : 4;
+    DWORD64 mod_base = sym->ModBase;
+    DWORD   cur_type = sym->TypeIndex;
+    ULONG   size     = (sym->Size > 0 && sym->Size <= 8) ? (ULONG)sym->Size : 4;
+
+    if (member_path[0] != '\0')
+    {
+        char *path = member_path;
+        char token[128];
+
+        while (path && path[0] != '\0')
+        {
+            char *next_dot = strchr(path, '.');
+            char *next_arr = strstr(path, "->");
+            char *next = NULL;
+            int   is_ptr = 0;
+
+            if (next_dot && next_arr)
+            {
+                if (next_arr < next_dot) { next = next_arr; is_ptr = 1; }
+                else                     { next = next_dot; is_ptr = 0; }
+            }
+            else if (next_arr) { next = next_arr; is_ptr = 1; }
+            else if (next_dot) { next = next_dot; is_ptr = 0; }
+
+            size_t tlen = next ? (size_t)(next - path) : strlen(path);
+            if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
+            strncpy(token, path, tlen);
+            token[tlen] = '\0';
+
+            DWORD type_tag = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                TI_GET_SYMTAG, &type_tag);
+
+            if (is_ptr || type_tag == SYM_TAG_POINTER)
+            {
+                if (type_tag == SYM_TAG_POINTER)
+                {
+                    DWORD pointed = 0;
+                    SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                        TI_GET_TYPEID, &pointed);
+                    cur_type = pointed;
+                }
+                unsigned long long ptr_val = 0;
+                SIZE_T n;
+                ReadProcessMemory(dbg->process, (void*)var_addr,
+                    &ptr_val, sizeof(ptr_val), &n);
+                var_addr = (DWORD64)ptr_val;
+            }
+
+            DWORD member_type = 0, member_offset = 0;
+            if (!find_member(dbg, mod_base, cur_type, token,
+                    &member_type, &member_offset))
+            {
+                printf("member '%s' not found\n", token);
+                return -1;
+            }
+
+            var_addr += member_offset;
+            cur_type  = member_type;
+
+            ULONG64 mlen = 0;
+            SymGetTypeInfo(dbg->sym_handle, mod_base, cur_type,
+                TI_GET_LENGTH, &mlen);
+            size = (ULONG)(mlen > 0 && mlen <= 8 ? mlen : 4);
+
+            path = next ? (is_ptr ? next + 2 : next + 1) : NULL;
+        }
+    }
 
     unsigned long long write_val = 0;
 
@@ -471,11 +864,11 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
 
     if (!ok)
     {
-        printf("WriteProcessMemory failed for '%s'\n", varname);
+        printf("WriteProcessMemory failed for '%s'\n", name);
         return -1;
     }
 
-    printf("%s = %lld\n", varname, value);
+    printf("%s = %lld\n", name, value);
     return 0;
 }
 
