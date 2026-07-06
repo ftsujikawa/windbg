@@ -44,6 +44,9 @@ int main(void)
 
     printf("union.i = %d\n", u.i);
 
+    float f = 2.3;
+    printf("float f = %f\n", f);
+    
     int fact5 = factorial(5);
     printf("factorial(5) = %d\n", fact5);
 

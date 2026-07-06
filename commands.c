@@ -341,7 +341,7 @@ void command_loop(debugger_t *dbg)
                     {
                         /* Try register first, fall back to variable */
                         if (!set_register(dbg, lhs, rv.value))
-                            expr_assign(dbg, lhs, rv.value);
+                            expr_assign(dbg, lhs, &rv);
                     }
                 }
             }

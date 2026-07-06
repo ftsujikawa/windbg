@@ -55,6 +55,8 @@ typedef struct {
     token_kind_t kind;
     char         text[128];
     long long    ival;
+    double       fval;
+    int          is_float;
 } token_t;
 
 /* ------------------------------------------------------------------ */
@@ -93,14 +95,33 @@ static void lex_advance(lex_t *l)
         return;
     }
 
-    /* Number */
+    /* Number (integer or floating-point literal) */
     if (isdigit((unsigned char)s[p]))
     {
         char *end;
         long long v = strtoll(s + p, &end, 0);
-        l->cur.kind = TOK_NUM;
-        l->cur.ival = v;
         int len = (int)(end - (s + p));
+
+        /* Floating-point literal: keep the fractional part and the real value. */
+        if (*end == '.' && isdigit((unsigned char)end[1]))
+        {
+            char *fp_end;
+            double f = strtod(s + p, &fp_end);
+            end = fp_end;
+            len = (int)(end - (s + p));
+            l->cur.kind = TOK_NUM;
+            l->cur.ival = v;
+            l->cur.fval = f;
+            l->cur.is_float = 1;
+        }
+        else
+        {
+            l->cur.kind = TOK_NUM;
+            l->cur.ival = v;
+            l->cur.fval = 0.0;
+            l->cur.is_float = 0;
+        }
+
         if (len >= (int)sizeof(l->cur.text)) len = (int)sizeof(l->cur.text) - 1;
         strncpy_s(l->cur.text, sizeof(l->cur.text), s + p, (unsigned)len);
         l->cur.text[len] = '\0';
@@ -246,6 +267,40 @@ static void load_lvalue(debugger_t *dbg, expr_val_t *v)
         v->value = (long long)(int)(unsigned int)raw;
     else
         v->value = (long long)raw;
+
+    /* If the lvalue is a floating-point type, also decode its real value. */
+    if (v->mod_base && v->type_id)
+    {
+        DWORD tag = 0, bt = 0;
+        SymGetTypeInfo(dbg->sym_handle, v->mod_base, v->type_id,
+                       TI_GET_SYMTAG, &tag);
+        if (tag == SYM_TAG_BASETYPE)
+        {
+            SymGetTypeInfo(dbg->sym_handle, v->mod_base, v->type_id,
+                           TI_GET_BASETYPE, &bt);
+            if (bt == 8) /* btFloat */
+            {
+                v->is_float = 1;
+                if (sz == 4)
+                {
+                    float f;
+                    unsigned int u = (unsigned int)(raw & 0xffffffff);
+                    memcpy(&f, &u, sizeof(f));
+                    v->fvalue = (double)f;
+                }
+                else if (sz == 8)
+                {
+                    double d;
+                    memcpy(&d, &raw, sizeof(d));
+                    v->fvalue = d;
+                }
+                else
+                {
+                    v->fvalue = 0.0;
+                }
+            }
+        }
+    }
 }
 
 /* sizeof helper: given a type_id, return byte count */
@@ -339,7 +394,20 @@ static expr_val_t parse_primary(lex_t *l)
     /* Number literal */
     if (l->cur.kind == TOK_NUM)
     {
-        expr_val_t v = make_val(l->cur.ival);
+        expr_val_t v = {0};
+        if (l->cur.is_float)
+        {
+            v.value    = (long long)l->cur.fval;
+            v.fvalue   = l->cur.fval;
+            v.is_float = 1;
+        }
+        else
+        {
+            v.value    = l->cur.ival;
+            v.fvalue   = 0.0;
+            v.is_float = 0;
+        }
+        v.byte_size = 8;
         lex_advance(l);
         return v;
     }
@@ -1262,7 +1330,31 @@ static void print_val(debugger_t *dbg, const char *label,
             if (orig_len3 == 1) is_char = 1;
         }
 
-        if (fmt == FMT_DEFAULT)
+        int is_float = (scalar_tag == SYM_TAG_BASETYPE && scalar_basetype == 8); /* btFloat */
+        double fvalue = 0.0;
+        if (is_float)
+        {
+            if (scalar_len == 4)
+            {
+                float f;
+                unsigned int u = (unsigned int)(value & 0xffffffff);
+                memcpy(&f, &u, sizeof(f));
+                fvalue = (double)f;
+            }
+            else if (scalar_len == 8)
+            {
+                memcpy(&fvalue, &value, sizeof(double));
+            }
+        }
+
+        if (is_float && fmt == FMT_DEFAULT)
+        {
+            if (tname[0])
+                printf("%s = (%s) %f%s", ilabel, tname, fvalue, nl);
+            else
+                printf("%s = %f%s", ilabel, fvalue, nl);
+        }
+        else if (fmt == FMT_DEFAULT)
         {
             if (is_char)
             {
@@ -1708,6 +1800,13 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 printf("%s = %d '%c'\n", top_label,
                        (int)(v.value & 0xff), (int)(v.value & 0xff));
         }
+        else if (v.is_float && fmt == FMT_DEFAULT)
+        {
+            if (top_tname[0])
+                printf("%s = (%s) %f\n", top_label, top_tname, v.fvalue);
+            else
+                printf("%s = %f\n", top_label, v.fvalue);
+        }
         else
             print_int_fmt(top_label, v.value, v.byte_size, fmt, 1, top_tname);
     }
@@ -1718,7 +1817,7 @@ void expr_print(debugger_t *dbg, const char *expr_str)
     expr_print_fmt(dbg, expr_str, FMT_DEFAULT);
 }
 
-int expr_assign(debugger_t *dbg, const char *lhs, long long value)
+int expr_assign(debugger_t *dbg, const char *lhs, expr_val_t *val)
 {
     expr_val_t v = {0};
     if (expr_eval(dbg, lhs, &v) != EVAL_OK)
@@ -1735,16 +1834,56 @@ int expr_assign(debugger_t *dbg, const char *lhs, long long value)
     ULONG sz = v.byte_size ? v.byte_size : 4;
     if (sz > 8) sz = 8;
 
-    unsigned long long write_val =
-        (sz <= 4) ? (unsigned long long)(long)value
-                  : (unsigned long long)value;
+    /* Determine if target is a floating-point type (btFloat == 8) */
+    int target_is_fp = 0;
+    if (v.mod_base && v.type_id)
+    {
+        DWORD tag = 0, bt = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id,
+                       TI_GET_SYMTAG, &tag);
+        if (tag == SYM_TAG_BASETYPE)
+        {
+            SymGetTypeInfo(dbg->sym_handle, v.mod_base, v.type_id,
+                           TI_GET_BASETYPE, &bt);
+            if (bt == 8) target_is_fp = 1;
+        }
+    }
 
     SIZE_T n;
-    if (!WriteProcessMemory(dbg->process, (void*)v.addr, &write_val, sz, &n))
+    if (target_is_fp)
     {
-        printf("WriteProcessMemory failed for '%s'\n", lhs);
-        return -1;
+        double src = val->is_float ? val->fvalue : (double)val->value;
+        if (sz == 4)
+        {
+            float f = (float)src;
+            if (!WriteProcessMemory(dbg->process, (void*)v.addr, &f, sizeof(f), &n))
+            {
+                printf("WriteProcessMemory failed for '%s'\n", lhs);
+                return -1;
+            }
+            printf("%s = %f\n", lhs, f);
+        }
+        else
+        {
+            if (!WriteProcessMemory(dbg->process, (void*)v.addr, &src, sizeof(src), &n))
+            {
+                printf("WriteProcessMemory failed for '%s'\n", lhs);
+                return -1;
+            }
+            printf("%s = %f\n", lhs, src);
+        }
     }
-    printf("%s = %lld\n", lhs, value);
+    else
+    {
+        unsigned long long write_val =
+            (sz <= 4) ? (unsigned long long)(long)val->value
+                      : (unsigned long long)val->value;
+        if (!WriteProcessMemory(dbg->process, (void*)v.addr, &write_val, sz, &n))
+        {
+            printf("WriteProcessMemory failed for '%s'\n", lhs);
+            return -1;
+        }
+        printf("%s = %lld\n", lhs, val->value);
+    }
     return 0;
 }

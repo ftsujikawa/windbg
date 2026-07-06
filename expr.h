@@ -26,6 +26,10 @@ typedef struct {
     /* Always filled: the numeric value (or address when is_lvalue) */
     long long value;
 
+    /* Floating-point value and flag (set for floating-point literals) */
+    double    fvalue;
+    int       is_float;
+
     /* Type info (may be 0 if unknown) */
     DWORD64  mod_base;
     DWORD    type_id;
@@ -54,4 +58,4 @@ void expr_print_fmt(debugger_t *dbg, const char *expr, print_fmt_t fmt);
 void expr_print(debugger_t *dbg, const char *expr);
 
 /* Write value to lvalue result (like set command) */
-int expr_assign(debugger_t *dbg, const char *lhs, long long value);
+int expr_assign(debugger_t *dbg, const char *lhs, expr_val_t *val);
