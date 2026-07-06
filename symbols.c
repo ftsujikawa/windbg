@@ -804,6 +804,30 @@ void* skip_function_prologue(debugger_t *dbg, void *addr)
     return addr;
 }
 
+/* StackWalk64's hProcess argument is also handed to the SymFunctionTableAccess64/
+ * SymGetModuleBase64 callbacks, which look up loaded-module info keyed by that
+ * handle. Everything was loaded via SymInitialize/SymLoadModuleEx under
+ * dbg->sym_handle (GetCurrentProcess(), not the debuggee), so hProcess must be
+ * dbg->sym_handle for unwinding to find the module -- but actual stack memory
+ * still has to be read from the real debuggee. This callback redirects the
+ * default memory reads there. */
+static HANDLE g_backtrace_debuggee = NULL;
+
+static BOOL CALLBACK backtrace_read_memory(
+    HANDLE hProcess,
+    DWORD64 base_addr,
+    PVOID buffer,
+    DWORD size,
+    LPDWORD bytes_read)
+{
+    (void)hProcess;
+    SIZE_T n = 0;
+    BOOL ok = ReadProcessMemory(g_backtrace_debuggee, (void*)base_addr, buffer, size, &n);
+    if (bytes_read)
+        *bytes_read = (DWORD)n;
+    return ok;
+}
+
 void print_backtrace(debugger_t *dbg)
 {
     CONTEXT ctx = {0};
@@ -820,15 +844,17 @@ void print_backtrace(debugger_t *dbg)
 
     DWORD machine = IMAGE_FILE_MACHINE_AMD64;
 
+    g_backtrace_debuggee = dbg->process;
+
     for (int i = 0; i < 32; i++)
     {
         BOOL ok = StackWalk64(
             machine,
-            dbg->process,
+            dbg->sym_handle,
             dbg->thread,
             &frame,
             &ctx,
-            NULL,
+            backtrace_read_memory,
             SymFunctionTableAccess64,
             SymGetModuleBase64,
             NULL
@@ -1396,10 +1422,15 @@ void print_line_info(debugger_t *dbg, const char *filename_filter)
 /* ------------------------------------------------------------------ */
 /* show variables (locals / args / globals)                           */
 /* ------------------------------------------------------------------ */
+#define SHOW_ENUM_MAX_NAMES 512
+
 typedef struct {
     const char *what;      /* "locals", "args", "globals" */
     debugger_t *dbg;
     int count;
+    char names[SHOW_ENUM_MAX_NAMES][128];  /* matched names, printed after
+                                               enumeration finishes (see below) */
+    int name_count;
 } show_enum_ctx_t;
 
 static BOOL CALLBACK show_enum_cb(PSYMBOL_INFO sym, ULONG size, PVOID ctx)
@@ -1426,15 +1457,22 @@ static BOOL CALLBACK show_enum_cb(PSYMBOL_INFO sym, ULONG size, PVOID ctx)
         if ((sym->Flags & SYMFLAG_PARAMETER) || (sym->Flags & SYMFLAG_REGREL)
             || (sym->Flags & SYMFLAG_LOCAL) || (sym->Flags & SYMFLAG_REGISTER))
             return TRUE;
+        if (sym->Tag != 7 /* SymTagData: exclude functions/types picked up
+                              by the module-wide walk below */)
+            return TRUE;
     }
     else
     {
         return FALSE;
     }
 
-    /* Reuse the print command's expression evaluation engine */
-    expr_print(c->dbg, sym->Name);
-    c->count++;
+    /* Defer to after SymEnumSymbols returns: expr_print() triggers its own
+       SymEnumSymbols call (via expr_lookup_symbol), and calling that
+       reentrantly on the same handle from inside this callback corrupts/
+       truncates the enumeration in progress. Just collect the name here. */
+    if (c->name_count < SHOW_ENUM_MAX_NAMES)
+        strncpy_s(c->names[c->name_count], sizeof(c->names[0]), sym->Name, _TRUNCATE);
+    c->name_count++;
     return TRUE;
 }
 
@@ -1464,17 +1502,36 @@ void show_variables(debugger_t *dbg, const char *what)
     ctx.ContextFlags = CONTEXT_FULL;
     GetThreadContext(dbg->thread, &ctx);
 
-    IMAGEHLP_STACK_FRAME img_frame = {0};
-    img_frame.InstructionOffset = ctx.Rip;
-    img_frame.FrameOffset = ctx.Rsp;
-    img_frame.StackOffset = ctx.Rsp;
-
-    SymSetContext(dbg->sym_handle, &img_frame, NULL);
-
     show_enum_ctx_t sctx = {0};
     sctx.what = what;
     sctx.dbg  = dbg;
-    SymEnumSymbols(dbg->sym_handle, 0, "*", show_enum_cb, &sctx);
+
+    if (strcmp(what, "globals") == 0)
+    {
+        /* SymEnumSymbols with BaseOfDll=0 only walks the current context's
+           scope (locals/params); it never reaches true global variables.
+           Enumerate the whole module by its real base address instead. */
+        DWORD64 mod_base = SymGetModuleBase64(dbg->sym_handle, ctx.Rip);
+        SymEnumSymbols(dbg->sym_handle, mod_base, "*", show_enum_cb, &sctx);
+    }
+    else
+    {
+        IMAGEHLP_STACK_FRAME img_frame = {0};
+        img_frame.InstructionOffset = ctx.Rip;
+        img_frame.FrameOffset = ctx.Rsp;
+        img_frame.StackOffset = ctx.Rsp;
+
+        SymSetContext(dbg->sym_handle, &img_frame, NULL);
+
+        SymEnumSymbols(dbg->sym_handle, 0, "*", show_enum_cb, &sctx);
+    }
+
+    int limit = sctx.name_count < SHOW_ENUM_MAX_NAMES ? sctx.name_count : SHOW_ENUM_MAX_NAMES;
+    for (int i = 0; i < limit; i++)
+    {
+        expr_print(dbg, sctx.names[i]);
+        sctx.count++;
+    }
 
     if (sctx.count == 0)
         printf("no %s found\n", what);

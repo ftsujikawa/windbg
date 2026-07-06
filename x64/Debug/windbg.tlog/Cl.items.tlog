@@ -2,6 +2,7 @@ c:\Users\f-tsu\source\repos\windbg\windbg\breakpoints.c;c:\Users\f-tsu\source\re
 c:\Users\f-tsu\source\repos\windbg\windbg\commands.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\commands.obj
 c:\Users\f-tsu\source\repos\windbg\windbg\debugger.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\debugger.obj
 c:\Users\f-tsu\source\repos\windbg\windbg\disasm.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\disasm.obj
+c:\Users\f-tsu\source\repos\windbg\windbg\leakcheck.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\leakcheck.obj
 c:\Users\f-tsu\source\repos\windbg\windbg\main.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\main.obj
 c:\Users\f-tsu\source\repos\windbg\windbg\memory.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\memory.obj
 c:\Users\f-tsu\source\repos\windbg\windbg\registers.c;c:\Users\f-tsu\source\repos\windbg\windbg\x64\Debug\registers.obj

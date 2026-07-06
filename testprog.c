@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 struct test_struct {
     int a;
@@ -44,6 +45,10 @@ int main()
     printf("%d\n", a[2]);
     printf("%d\n", a[3]);
     printf("%d\n", a[4]);
+
+    void *leak_ptr = malloc(64);   /* intentionally never freed: leak-detection demo */
+    void *ok_ptr = malloc(32);
+    free(ok_ptr);
 
     return 0;
 }

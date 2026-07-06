@@ -6,6 +6,7 @@
 #include "commands.h"
 #include "registers.h"
 #include "symbols.h"
+#include "leakcheck.h"
 
 int debugger_start(debugger_t *dbg, const char *program)
 {
@@ -38,7 +39,13 @@ int debugger_start(debugger_t *dbg, const char *program)
     dbg->pid = pi.dwProcessId;
     dbg->tid = pi.dwThreadId;
     dbg->print_pretty = 1;
-    dbg->sym_handle = GetCurrentProcess();
+    /* Must be the real debuggee handle, not GetCurrentProcess(): DbgHelp's
+       .pdata (unwind info) lookups for StackWalk64 read the module image
+       from whatever process handle Sym* calls were made with, and that
+       image is only mapped in the debuggee. Symbol/line lookups work with
+       either handle (they read the .pdb file, not live memory), but
+       SymFunctionTableAccess64 needs the real one. */
+    dbg->sym_handle = dbg->process;
 
     strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);
 
@@ -58,6 +65,14 @@ void debugger_restart(debugger_t *dbg)
         breakpoint_t *next = bp->next;
         free(bp);
         bp = next;
+    }
+
+    alloc_info_t *a = dbg->allocations;
+    while (a != NULL)
+    {
+        alloc_info_t *next = a->next;
+        free(a);
+        a = next;
     }
 
     if (dbg->sym_handle)
@@ -120,7 +135,7 @@ void debugger_loop(debugger_t *dbg)
                     SymLoadModuleEx(
                         dbg->sym_handle,
                         NULL,
-                        "testprog.exe",
+                        dbg->target_program,
                         NULL,
                         (DWORD64)
                         ev.u.CreateProcessInfo.lpBaseOfImage,
@@ -149,6 +164,31 @@ void debugger_loop(debugger_t *dbg)
                     );
 
                 int source_shown = 0;
+
+                if (dbg->leak_tracking &&
+                    ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT)
+                {
+                    CONTEXT lctx = {0};
+                    lctx.ContextFlags = CONTEXT_FULL;
+                    GetThreadContext(dbg->thread, &lctx);
+                    void *hit_addr = (void*)(lctx.Rip - 1);
+
+                    if (hit_addr == dbg->malloc_addr || hit_addr == dbg->free_addr ||
+                        (dbg->malloc_ret_addr != NULL && hit_addr == dbg->malloc_ret_addr))
+                    {
+                        lctx.Rip--;
+                        SetThreadContext(dbg->thread, &lctx);
+
+                        if (hit_addr == dbg->malloc_addr)
+                            leak_on_malloc_enter(dbg);
+                        else if (hit_addr == dbg->free_addr)
+                            leak_on_free_enter(dbg);
+                        else
+                            leak_on_malloc_return(dbg);
+
+                        break;
+                    }
+                }
 
                 if (ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT
                     && dbg->temp_bp_addr != NULL)
@@ -192,10 +232,13 @@ void debugger_loop(debugger_t *dbg)
 
                     if (bp != NULL)
                     {
+                        BYTE orig_byte = bp->original_byte;
                         remove_breakpoint_at(dbg, hit_addr);
 
                         ctx.Rip--;
                         SetThreadContext(dbg->thread, &ctx);
+
+                        arm_breakpoint_rearm(dbg, hit_addr, orig_byte);
 
                         printf("hit breakpoint at %p\n", hit_addr);
                         if (!show_source_line(dbg, ctx.Rip))
@@ -210,6 +253,39 @@ void debugger_loop(debugger_t *dbg)
 
                 if (ev.u.Exception.ExceptionRecord.ExceptionCode == 0x80000004)
                 {
+                    int si_requested = dbg->si_requested;
+                    dbg->si_requested = 0;
+
+                    if (breakpoint_rearm_pending(dbg))
+                    {
+                        finish_breakpoint_rearm(dbg);
+
+                        /* a user step/next was also in flight: keep it
+                           moving, this tick was consumed internally */
+                        if (dbg->next_mode || dbg->step_mode)
+                        {
+                            single_step(dbg);
+                            break;
+                        }
+
+                        /* a plain `si` landed on exactly this rearm step:
+                           still show it, don't silently swallow it */
+                        if (!si_requested)
+                            break;
+                    }
+
+                    if (dbg->leak_tracking && leak_rearm_pending(dbg))
+                    {
+                        leak_finish_rearm(dbg);
+
+                        /* a user step/next was also in flight: keep it
+                           moving, this tick was consumed internally */
+                        if (dbg->next_mode || dbg->step_mode)
+                            single_step(dbg);
+
+                        break;
+                    }
+
                     CONTEXT ctx = {0};
                     ctx.ContextFlags = CONTEXT_FULL;
                     GetThreadContext(dbg->thread, &ctx);
@@ -297,6 +373,9 @@ void debugger_loop(debugger_t *dbg)
 
                 printf("process exited with code %lu\n",
                     ev.u.ExitProcess.dwExitCode);
+
+                if (dbg->leak_tracking)
+                    print_leaks(dbg);
 
                 ContinueDebugEvent(
                     ev.dwProcessId,

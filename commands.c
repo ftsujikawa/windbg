@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "symbols.h"
 #include "expr.h"
+#include "leakcheck.h"
 
 void command_loop(debugger_t *dbg)
 {
@@ -68,6 +69,7 @@ void command_loop(debugger_t *dbg)
 
         else if (strncmp(line, "si", 2) == 0)
         {
+            dbg->si_requested = 1;
             single_step(dbg);
 
             return;
@@ -498,6 +500,21 @@ void command_loop(debugger_t *dbg)
             print_line_info(dbg, filter);
         }
 
+        else if (strncmp(line, "leak", 4) == 0)
+        {
+            const char *p = line + 4;
+            while (*p == ' ') p++;
+            char *nl = strchr((char*)p, '\n'); if (nl) *nl = '\0';
+            char *cr = strchr((char*)p, '\r'); if (cr) *cr = '\0';
+
+            if (_stricmp(p, "on") == 0)
+                leak_tracking_enable(dbg);
+            else if (_stricmp(p, "off") == 0)
+                leak_tracking_disable(dbg);
+            else
+                printf("usage: leak [on|off]\n");
+        }
+
         else if (strncmp(line, "show ", 5) == 0
                  || strcmp(line, "show\n") == 0
                  || strcmp(line, "show\r\n") == 0
@@ -513,6 +530,8 @@ void command_loop(debugger_t *dbg)
 
             if (strcmp(what, "bp") == 0)
                 print_breakpoints(dbg);
+            else if (strcmp(what, "leaks") == 0)
+                print_leaks(dbg);
             else
                 show_variables(dbg, what);
         }
@@ -546,7 +565,8 @@ void command_loop(debugger_t *dbg)
             printf("  print [/fmt] <expr>            -- print expression value\n");
             printf("  p [/fmt] <expr>                -- alias for print\n");
             printf("  set print pretty [on|off]      -- toggle pretty printing\n");
-            printf("  show [locals|args|globals|bp]  -- show variables / breakpoints\n");
+            printf("  leak [on|off]                  -- toggle malloc/free leak tracking\n");
+            printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
             printf("  tb                             -- print backtrace\n");
             printf("  lines [filter]                 -- show source lines\n");
             printf("  run                            -- restart target program\n");

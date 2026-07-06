@@ -195,3 +195,37 @@ void print_breakpoints(debugger_t *dbg)
         printf("#%d  0x%llx  in %s%s\n", i, addr, symbol_name, line_info);
     }
 }
+
+/* A permanent breakpoint fires by removing its 0xCC so the debuggee can
+ * execute past it; without rearming it, it would only ever fire once. This
+ * restores the byte for exactly one instruction (via the trap flag) and
+ * remembers to rewrite 0xCC once that single-step completes (see
+ * finish_breakpoint_rearm, invoked from debugger.c's STATUS_SINGLE_STEP
+ * handling), so it fires again on a later call -- e.g. a recursive function
+ * or a breakpoint inside a loop. */
+void arm_breakpoint_rearm(debugger_t *dbg, void *addr, BYTE orig_byte)
+{
+    CONTEXT ctx = {0};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(dbg->thread, &ctx);
+    ctx.EFlags |= 0x100;
+    SetThreadContext(dbg->thread, &ctx);
+
+    dbg->bp_rearm_addr = addr;
+    dbg->bp_rearm_byte = orig_byte;
+}
+
+int breakpoint_rearm_pending(debugger_t *dbg)
+{
+    return dbg->bp_rearm_addr != NULL;
+}
+
+void finish_breakpoint_rearm(debugger_t *dbg)
+{
+    SIZE_T n;
+    BYTE int3 = 0xCC;
+
+    WriteProcessMemory(dbg->process, dbg->bp_rearm_addr, &int3, 1, &n);
+    FlushInstructionCache(dbg->process, dbg->bp_rearm_addr, 1);
+    dbg->bp_rearm_addr = NULL;
+}

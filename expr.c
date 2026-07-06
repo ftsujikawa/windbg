@@ -856,10 +856,26 @@ static int expr_lookup_symbol(debugger_t *dbg, const char *name,
     strncpy_s(ctx.target, sizeof(ctx.target), name, _TRUNCATE);
     SymEnumSymbols(dbg->sym_handle, 0, "*", enum_sym_cb, &ctx);
 
-    if (!ctx.found)
-        return 0;
+    PSYMBOL_INFO si;
+    char global_buf[sizeof(SYMBOL_INFO) + 256];
 
-    PSYMBOL_INFO si = (PSYMBOL_INFO)ctx.sym_buf;
+    if (ctx.found)
+    {
+        si = (PSYMBOL_INFO)ctx.sym_buf;
+    }
+    else
+    {
+        /* SymEnumSymbols with BaseOfDll=0 only walks the current scope's
+           locals/params -- it never reaches true global variables. Fall
+           back to SymFromName, which resolves module-level symbols
+           (globals, functions) directly by name. */
+        PSYMBOL_INFO gsi = (PSYMBOL_INFO)global_buf;
+        gsi->SizeOfStruct = sizeof(SYMBOL_INFO);
+        gsi->MaxNameLen = 255;
+        if (!SymFromName(dbg->sym_handle, name, gsi))
+            return 0;
+        si = gsi;
+    }
 
     /* Resolve address */
     CONTEXT tctx = {0};
@@ -1318,7 +1334,8 @@ static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
         DWORD64 member_addr = base_addr + offset;
         unsigned long long val = 0;
         SIZE_T n;
-        ReadProcessMemory(dbg->process, (void*)member_addr, &val, (SIZE_T)child_len, &n);
+        SIZE_T read_len = (child_len > sizeof(val)) ? sizeof(val) : (SIZE_T)child_len;
+        ReadProcessMemory(dbg->process, (void*)member_addr, &val, read_len, &n);
 
         int pretty = dbg->print_pretty;
         int member_nl = pretty ? 1 : 0;
@@ -1464,7 +1481,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 else
                 {
                     unsigned long long val = 0; SIZE_T n;
-                    ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                    SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
+                    ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                     if (elem_len <= 4)
                         printf("  [%u] = %d (0x%x)\n", i, (int)val, (unsigned int)val);
                     else
@@ -1490,7 +1508,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 else
                 {
                     unsigned long long val = 0; SIZE_T n;
-                    ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                    SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
+                    ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                     if (elem_len <= 4)
                         printf("[%u] = %d (0x%x)", i, (int)val, (unsigned int)val);
                     else
@@ -1523,7 +1542,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
             {
                 DWORD64 ea = v.addr + i * elem_len;
                 unsigned long long val = 0; SIZE_T n;
-                ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
+                ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                 char idx[32]; snprintf(idx, sizeof(idx), "  [%u]", i);
                 print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt, 1, NULL);
             }
@@ -1536,7 +1556,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
             {
                 DWORD64 ea = v.addr + i * elem_len;
                 unsigned long long val = 0; SIZE_T n;
-                ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
+                ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                 if (i > 0) printf(", ");
                 if (fmt == FMT_HEX)
                     printf("[%u] = 0x%llx", i, (unsigned long long)val);
