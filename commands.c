@@ -558,8 +558,10 @@ void command_loop(debugger_t *dbg)
             printf("  break <addr|symbol|file:line>  -- set a breakpoint\n");
             printf("  b <addr|symbol|file:line>      -- alias for break\n");
             printf("  regs                           -- show registers\n");
-            printf("  si                             -- single step\n");
-            printf("  n                              -- step over (next)\n");
+            printf("  si                             -- single step (one instruction)\n");
+            printf("  s / step                       -- step into (one source line)\n");
+            printf("  n                              -- step over (next source line)\n");
+            printf("  up                             -- run until the current function returns\n");
             printf("  x <addr|expr>                  -- examine memory\n");
             printf("  continue / c                   -- continue execution\n");
             printf("  print [/fmt] <expr>            -- print expression value\n");
@@ -567,8 +569,11 @@ void command_loop(debugger_t *dbg)
             printf("  set print pretty [on|off]      -- toggle pretty printing\n");
             printf("  leak [on|off]                  -- toggle malloc/free leak tracking\n");
             printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
+            printf("  syms <name>                    -- show symbol details (address/size/type)\n");
             printf("  tb                             -- print backtrace\n");
-            printf("  lines [filter]                 -- show source lines\n");
+            printf("  list / l [line|file:line]      -- show source code around a line\n");
+            printf("  lines [filter]                 -- show line number <-> address mapping\n");
+            printf("  dis [addr|symbol|file:line]    -- disassemble\n");
             printf("  run                            -- restart target program\n");
             printf("  help / h                       -- show this help\n");
             printf("  quit                           -- exit debugger\n");

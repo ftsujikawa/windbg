@@ -1244,9 +1244,10 @@ void* lookup_symbol(
 
 static const char *sym_tag_name(DWORD tag)
 {
+    /* SymTagEnum values (dbghelp.h): note SymTagBaseType is 16, not 2
+       (2 is SymTagCompiland) -- this table previously had them swapped. */
     switch (tag)
     {
-    case  2: return "BaseType";
     case  5: return "Function";
     case  7: return "Data";
     case 11: return "UDT (struct/union)";
@@ -1254,7 +1255,7 @@ static const char *sym_tag_name(DWORD tag)
     case 13: return "FunctionType";
     case 14: return "Pointer";
     case 15: return "Array";
-    case 16: return "BaseClass";
+    case 16: return "BaseType";
     case 17: return "Typedef";
     default: return "Unknown";
     }
@@ -1269,7 +1270,6 @@ typedef struct {
 static BOOL CALLBACK syms_enum_cb(PSYMBOL_INFO si, ULONG size, PVOID ctx)
 {
     syms_enum_ctx_t *c = (syms_enum_ctx_t *)ctx;
-    fprintf(stderr, "[SYMS] %s\n", si->Name);
     if (strcmp(si->Name, c->target) == 0)
     {
         ULONG copy_size = si->SizeOfStruct + si->MaxNameLen;
@@ -1291,23 +1291,36 @@ void print_symbol_info(debugger_t *dbg, const char *name)
     frm.InstructionOffset = ctx.Rip;
     frm.FrameOffset       = ctx.Rsp;
     frm.StackOffset       = ctx.Rsp;
-    BOOL sc_ok = SymSetContext(dbg->sym_handle, &frm, NULL);
-    fprintf(stderr, "[SYMS] SymSetContext ok=%d Rip=0x%llx handle=%p\n",
-            sc_ok, (unsigned long long)frm.InstructionOffset,
-            (void*)dbg->sym_handle);
+    SymSetContext(dbg->sym_handle, &frm, NULL);
 
     syms_enum_ctx_t ec = {0};
     strncpy(ec.target, name, sizeof(ec.target) - 1);
-    BOOL en_ok = SymEnumSymbols(dbg->sym_handle, 0, "*", syms_enum_cb, &ec);
-    fprintf(stderr, "[SYMS] SymEnumSymbols ok=%d found=%d\n", en_ok, ec.found);
+    SymEnumSymbols(dbg->sym_handle, 0, "*", syms_enum_cb, &ec);
 
-    if (!ec.found)
+    PSYMBOL_INFO sym;
+    char global_buf[sizeof(SYMBOL_INFO) + 256];
+
+    if (ec.found)
     {
-        printf("symbol '%s' not found\n", name);
-        return;
+        sym = (PSYMBOL_INFO)ec.sym_buf;
     }
-
-    PSYMBOL_INFO sym = (PSYMBOL_INFO)ec.sym_buf;
+    else
+    {
+        /* SymEnumSymbols with BaseOfDll=0 only walks the current scope's
+           locals/params -- it never reaches functions or true global
+           variables. Fall back to SymFromName, which resolves module-level
+           symbols directly by name (same technique as lookup_symbol() and
+           expr_lookup_symbol()). */
+        PSYMBOL_INFO gsym = (PSYMBOL_INFO)global_buf;
+        gsym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        gsym->MaxNameLen = 255;
+        if (!SymFromName(dbg->sym_handle, name, gsym))
+        {
+            printf("symbol '%s' not found\n", name);
+            return;
+        }
+        sym = gsym;
+    }
 
     /* Resolve address */
     DWORD64 addr = resolve_var_addr(dbg, &ctx, sym);
