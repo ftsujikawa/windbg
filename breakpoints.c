@@ -151,3 +151,47 @@ int remove_temp_breakpoint(debugger_t *dbg)
 
     return 0;
 }
+
+void print_breakpoints(debugger_t *dbg)
+{
+    if (dbg->breakpoints == NULL)
+    {
+        printf("no breakpoints set\n");
+        return;
+    }
+
+    int i = 1;
+
+    for (breakpoint_t *bp = dbg->breakpoints; bp != NULL; bp = bp->next, i++)
+    {
+        DWORD64 addr = (DWORD64)bp->addr;
+
+        char sym_buffer[sizeof(SYMBOL_INFO) + 256] = {0};
+        PSYMBOL_INFO sym = (PSYMBOL_INFO)sym_buffer;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 255;
+
+        char symbol_name[300] = "???";
+        DWORD64 disp = 0;
+
+        if (SymFromAddr(dbg->sym_handle, addr, &disp, sym))
+        {
+            snprintf(symbol_name, sizeof(symbol_name),
+                "%s+0x%llx", sym->Name, disp);
+        }
+
+        IMAGEHLP_LINE64 line = {0};
+        line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        DWORD line_disp = 0;
+
+        char line_info[512] = "";
+
+        if (SymGetLineFromAddr64(dbg->sym_handle, addr, &line_disp, &line))
+        {
+            snprintf(line_info, sizeof(line_info),
+                " at %s:%lu", line.FileName, line.LineNumber);
+        }
+
+        printf("#%d  0x%llx  in %s%s\n", i, addr, symbol_name, line_info);
+    }
+}

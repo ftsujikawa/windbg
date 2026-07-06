@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\f-tsu\source\repos\windbg\x64\Debug\windbg.exe</FullPath>
+      <FullPath>c:\Users\f-tsu\source\repos\windbg\x64\Debug\windbg.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

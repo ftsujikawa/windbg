@@ -12,7 +12,7 @@
 #define SYM_TAG_UDT        11
 #define SYM_TAG_POINTER    14
 #define SYM_TAG_ARRAYTYPE  15
-#define SYM_TAG_BASETYPE    2
+#define SYM_TAG_BASETYPE   16
 #define SYM_TAG_TYPEDEF    17
 
 /* ------------------------------------------------------------------ */
@@ -1022,11 +1022,92 @@ static void print_int_fmt(const char *label, long long value,
                           ULONG byte_size, print_fmt_t fmt, int newline,
                           const char *type_name);
 
+/* Map a BaseType (dbghelp.h BasicType enum) + byte size to a C type name */
+static const char *basetype_name(DWORD basetype, ULONG len)
+{
+    switch (basetype)
+    {
+    case 1: return "void";           /* btVoid  */
+    case 2: return "char";           /* btChar  */
+    case 3: return "wchar_t";        /* btWChar */
+    case 6:                          /* btInt   */
+        switch (len)
+        {
+        case 1:  return "signed char";
+        case 2:  return "short";
+        case 8:  return "__int64";
+        default: return "int";
+        }
+    case 7:                          /* btUInt  */
+        switch (len)
+        {
+        case 1:  return "unsigned char";
+        case 2:  return "unsigned short";
+        case 8:  return "unsigned __int64";
+        default: return "unsigned int";
+        }
+    case 8:  return (len == 8) ? "double" : "float";  /* btFloat */
+    case 10: return "bool";          /* btBool */
+    case 13: return "long";          /* btLong */
+    case 14: return "unsigned long"; /* btULong */
+    case 31: return "HRESULT";       /* btHresult */
+    case 32: return "char16_t";      /* btChar16 */
+    case 33: return "char32_t";      /* btChar32 */
+    case 34: return "char8_t";       /* btChar8 */
+    default: return "";
+    }
+}
+
+/* Resolve a printable C-style type name for any type_id: base types are
+ * named from their BasicType+size, pointers/arrays are built up
+ * recursively from their pointed-to/element type, everything else
+ * (UDT/enum/typedef) uses its own DbgHelp symbol name. */
 static void get_type_name(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
                           char *buf, size_t buflen)
 {
     buf[0] = '\0';
     if (!modbase || !type_id) return;
+
+    DWORD tag = 0;
+    SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMTAG, &tag);
+
+    if (tag == SYM_TAG_POINTER)
+    {
+        DWORD inner_id = 0;
+        char inner[112] = {0};
+        if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_TYPEID, &inner_id))
+            get_type_name(dbg, modbase, inner_id, inner, sizeof(inner));
+        snprintf(buf, buflen, "%s *", inner[0] ? inner : "void");
+        return;
+    }
+
+    if (tag == SYM_TAG_ARRAYTYPE)
+    {
+        DWORD elem_id = 0;
+        ULONG64 total_len = 0, elem_len = 0;
+        SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_TYPEID, &elem_id);
+        SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_LENGTH, &total_len);
+        SymGetTypeInfo(dbg->sym_handle, modbase, elem_id, TI_GET_LENGTH, &elem_len);
+        if (elem_len == 0) elem_len = 1;
+
+        char inner[112] = {0};
+        get_type_name(dbg, modbase, elem_id, inner, sizeof(inner));
+        snprintf(buf, buflen, "%s [%llu]", inner[0] ? inner : "?",
+            (unsigned long long)(total_len / elem_len));
+        return;
+    }
+
+    if (tag == SYM_TAG_BASETYPE)
+    {
+        DWORD basetype = 0;
+        ULONG64 len = 0;
+        SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_BASETYPE, &basetype);
+        SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_LENGTH, &len);
+        strncpy_s(buf, buflen, basetype_name(basetype, (ULONG)len), _TRUNCATE);
+        return;
+    }
+
+    /* UDT / Enum / Typedef / others: use the symbol's own name */
     WCHAR *wname = NULL;
     if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMNAME, &wname)
         && wname)
@@ -1034,6 +1115,19 @@ static void get_type_name(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
         WideCharToMultiByte(CP_ACP, 0, wname, -1, buf, (int)buflen, NULL, NULL);
         LocalFree(wname);
     }
+}
+
+/* UdtKind values (cvconst.h): UdtStruct=0, UdtClass=1, UdtUnion=2, UdtInterface=3 */
+#define UDT_KIND_UNION 2
+
+/* "struct " / "union " prefix for a UDT type name, gdb-style */
+static const char *udt_kind_prefix(debugger_t *dbg, DWORD64 modbase, DWORD type_id)
+{
+    DWORD kind = 0;
+    if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_UDTKIND, &kind)
+        && kind == UDT_KIND_UNION)
+        return "union ";
+    return "struct ";
 }
 
 static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
@@ -1049,7 +1143,8 @@ static void print_val(debugger_t *dbg, const char *label,
     SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMTAG, &tag);
 
     char indent[64] = {0};
-    for (int i = 0; i < depth && i < 30; i++) { indent[i*2] = ' '; indent[i*2+1] = ' '; }
+    if (dbg->print_pretty)
+        for (int i = 0; i < depth && i < 30; i++) { indent[i*2] = ' '; indent[i*2+1] = ' '; }
 
     char tname[128] = {0};
     if (dbg->print_pretty)
@@ -1061,7 +1156,8 @@ static void print_val(debugger_t *dbg, const char *label,
     if (tag == SYM_TAG_UDT)
     {
         if (tname[0])
-            printf("%s = (%s) {%s", ilabel, tname, nl);
+            printf("%s = (%s%s) {%s", ilabel,
+                udt_kind_prefix(dbg, modbase, type_id), tname, nl);
         else
             printf("%s = {%s", ilabel, nl);
         print_struct_ex(dbg, modbase, type_id, addr, depth + 1, fmt);
@@ -1481,7 +1577,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         if (dbg->print_pretty)
         {
             if (top_tname[0])
-                printf("%s = (%s) {\n", top_label, top_tname);
+                printf("%s = (%s%s) {\n", top_label,
+                    udt_kind_prefix(dbg, v.mod_base, v.type_id), top_tname);
             else
                 printf("%s = {\n", top_label);
             print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);

@@ -510,7 +510,11 @@ void command_loop(debugger_t *dbg)
                 char *nl = strchr(what, '\n'); if (nl) *nl = '\0';
                 char *cr = strchr(what, '\r'); if (cr) *cr = '\0';
             }
-            show_variables(dbg, what);
+
+            if (strcmp(what, "bp") == 0)
+                print_breakpoints(dbg);
+            else
+                show_variables(dbg, what);
         }
 
         else if (strncmp(line, "run", 3) == 0)
@@ -542,7 +546,7 @@ void command_loop(debugger_t *dbg)
             printf("  print [/fmt] <expr>            -- print expression value\n");
             printf("  p [/fmt] <expr>                -- alias for print\n");
             printf("  set print pretty [on|off]      -- toggle pretty printing\n");
-            printf("  show [locals|args|globals]     -- show variables\n");
+            printf("  show [locals|args|globals|bp]  -- show variables / breakpoints\n");
             printf("  tb                             -- print backtrace\n");
             printf("  lines [filter]                 -- show source lines\n");
             printf("  run                            -- restart target program\n");
