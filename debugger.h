@@ -1,6 +1,11 @@
 #ifndef DEBUGGER_H
 #define DEBUGGER_H
 
+/* Disable MSVC deprecation warnings for standard C functions */
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <windows.h>
 #include <dbghelp.h>
 
@@ -44,6 +49,8 @@ typedef struct
     DWORD list_next_line;
 
     char target_program[512];
+
+    int print_pretty;
 
 } debugger_t;
 int debugger_start(debugger_t *dbg, const char *program);

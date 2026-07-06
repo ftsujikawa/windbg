@@ -4,16 +4,17 @@
 #include "debugger.h"
 #include "breakpoints.h"
 #include "commands.h"
+#include "registers.h"
 #include "symbols.h"
 
 int debugger_start(debugger_t *dbg, const char *program)
 {
-    STARTUPINFO si = {0};
+    STARTUPINFOA si = {0};
     PROCESS_INFORMATION pi = {0};
 
     si.cb = sizeof(si);
 
-    BOOL ok = CreateProcess(
+    BOOL ok = CreateProcessA(
         program,
         NULL,
         NULL,
@@ -36,6 +37,7 @@ int debugger_start(debugger_t *dbg, const char *program)
     dbg->thread = pi.hThread;
     dbg->pid = pi.dwProcessId;
     dbg->tid = pi.dwThreadId;
+    dbg->print_pretty = 1;
     dbg->sym_handle = GetCurrentProcess();
 
     strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);

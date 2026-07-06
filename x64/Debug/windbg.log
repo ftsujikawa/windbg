@@ -1,0 +1,11 @@
+﻿  breakpoints.c
+  commands.c
+  debugger.c
+  disasm.c
+  main.c
+  memory.c
+  registers.c
+  symbols.c
+  expr.c
+  コードを生成中...
+  windbg.vcxproj -> C:\Users\f-tsu\source\repos\windbg\x64\Debug\windbg.exe

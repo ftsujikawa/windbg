@@ -36,6 +36,12 @@
     <ClCompile Include="symbols.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="disasm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="expr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h">
@@ -54,6 +60,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="symbols.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="disasm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="expr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

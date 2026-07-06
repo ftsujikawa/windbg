@@ -6,6 +6,7 @@
 
 #include "symbols.h"
 #include "disasm.h"
+#include "expr.h"
 
 #pragma comment(lib, "dbghelp.lib")
 
@@ -514,7 +515,7 @@ void print_variable(debugger_t *dbg, const char *name)
                 int idx = 0;
                 char *close = strchr(path, ']');
                 if (!close) { printf("syntax error: missing ']'\n"); return; }
-                sscanf(path + 1, "%d", &idx);
+                sscanf_s(path + 1, "%d", &idx);
 
                 if (type_tag == SYM_TAG_POINTER)
                 {
@@ -979,7 +980,7 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
                 int idx = 0;
                 char *close = strchr(path, ']');
                 if (!close) { printf("syntax error: missing ']'\n"); return -1; }
-                sscanf(path + 1, "%d", &idx);
+                sscanf_s(path + 1, "%d", &idx);
 
                 if (type_tag_s == SYM_TAG_POINTER)
                 {
@@ -1390,4 +1391,93 @@ void print_line_info(debugger_t *dbg, const char *filename_filter)
     {
         printf("\n%d line(s) found\n", lctx.count);
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* show variables (locals / args / globals)                           */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    const char *what;      /* "locals", "args", "globals" */
+    debugger_t *dbg;
+    int count;
+} show_enum_ctx_t;
+
+static BOOL CALLBACK show_enum_cb(PSYMBOL_INFO sym, ULONG size, PVOID ctx)
+{
+    show_enum_ctx_t *c = (show_enum_ctx_t*)ctx;
+
+    /* Filter by scope */
+    if (strcmp(c->what, "locals") == 0)
+    {
+        if (!(sym->Flags & SYMFLAG_REGREL) && !(sym->Flags & SYMFLAG_LOCAL))
+            return TRUE;
+        /* exclude parameters */
+        if (sym->Flags & SYMFLAG_PARAMETER)
+            return TRUE;
+    }
+    else if (strcmp(c->what, "args") == 0)
+    {
+        if (!(sym->Flags & SYMFLAG_PARAMETER))
+            return TRUE;
+    }
+    else if (strcmp(c->what, "globals") == 0)
+    {
+        /* globals have no parameter/local/regrel flags and are not registers */
+        if ((sym->Flags & SYMFLAG_PARAMETER) || (sym->Flags & SYMFLAG_REGREL)
+            || (sym->Flags & SYMFLAG_LOCAL) || (sym->Flags & SYMFLAG_REGISTER))
+            return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    /* Reuse the print command's expression evaluation engine */
+    expr_print(c->dbg, sym->Name);
+    c->count++;
+    return TRUE;
+}
+
+void show_variables(debugger_t *dbg, const char *what)
+{
+    if (!what || !what[0])
+    {
+        printf("usage: show [locals|args|globals]\n");
+        return;
+    }
+
+    if (strcmp(what, "locals") != 0 &&
+        strcmp(what, "args") != 0 &&
+        strcmp(what, "globals") != 0)
+    {
+        printf("usage: show [locals|args|globals]\n");
+        return;
+    }
+
+    if (!dbg->thread || !dbg->process)
+    {
+        printf("no active process\n");
+        return;
+    }
+
+    CONTEXT ctx = {0};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(dbg->thread, &ctx);
+
+    IMAGEHLP_STACK_FRAME img_frame = {0};
+    img_frame.InstructionOffset = ctx.Rip;
+    img_frame.FrameOffset = ctx.Rsp;
+    img_frame.StackOffset = ctx.Rsp;
+
+    SymSetContext(dbg->sym_handle, &img_frame, NULL);
+
+    show_enum_ctx_t sctx = {0};
+    sctx.what = what;
+    sctx.dbg  = dbg;
+    SymEnumSymbols(dbg->sym_handle, 0, "*", show_enum_cb, &sctx);
+
+    if (sctx.count == 0)
+        printf("no %s found\n", what);
+    else
+        printf("%d %s(s) found\n", sctx.count, what);
 }

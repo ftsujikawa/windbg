@@ -73,7 +73,8 @@ static void lex_error(lex_t *l, const char *msg)
 {
     if (!l->err)
     {
-        strncpy(l->errmsg, msg, sizeof(l->errmsg) - 1);
+        /* use secure variant */
+        strncpy_s(l->errmsg, sizeof(l->errmsg), msg, _TRUNCATE);
         l->err = 1;
     }
 }
@@ -101,7 +102,7 @@ static void lex_advance(lex_t *l)
         l->cur.ival = v;
         int len = (int)(end - (s + p));
         if (len >= (int)sizeof(l->cur.text)) len = (int)sizeof(l->cur.text) - 1;
-        strncpy(l->cur.text, s + p, len);
+        strncpy_s(l->cur.text, sizeof(l->cur.text), s + p, (unsigned)len);
         l->cur.text[len] = '\0';
         l->pos = (int)(end - s);
         return;
@@ -114,7 +115,7 @@ static void lex_advance(lex_t *l)
         while (s[p] && (isalnum((unsigned char)s[p]) || s[p] == '_')) p++;
         int len = p - start;
         if (len >= (int)sizeof(l->cur.text)) len = (int)sizeof(l->cur.text) - 1;
-        strncpy(l->cur.text, s + start, len);
+        strncpy_s(l->cur.text, sizeof(l->cur.text), s + start, (unsigned)len);
         l->cur.text[len] = '\0';
         l->cur.kind = TOK_IDENT;
         l->pos = p;
@@ -123,23 +124,23 @@ static void lex_advance(lex_t *l)
 
     /* Two-char operators */
     if (s[p] == '-' && s[p+1] == '>')
-    { l->cur.kind = TOK_ARROW;   strncpy(l->cur.text, "->", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_ARROW;   strcpy_s(l->cur.text, sizeof(l->cur.text), "->"); l->pos = p+2; return; }
     if (s[p] == '<' && s[p+1] == '<')
-    { l->cur.kind = TOK_LSHIFT;  strncpy(l->cur.text, "<<", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_LSHIFT;  strcpy_s(l->cur.text, sizeof(l->cur.text), "<<"); l->pos = p+2; return; }
     if (s[p] == '>' && s[p+1] == '>')
-    { l->cur.kind = TOK_RSHIFT;  strncpy(l->cur.text, ">>", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_RSHIFT;  strcpy_s(l->cur.text, sizeof(l->cur.text), ">>"); l->pos = p+2; return; }
     if (s[p] == '&' && s[p+1] == '&')
-    { l->cur.kind = TOK_AMAMP;   strncpy(l->cur.text, "&&", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_AMAMP;   strcpy_s(l->cur.text, sizeof(l->cur.text), "&&"); l->pos = p+2; return; }
     if (s[p] == '|' && s[p+1] == '|')
-    { l->cur.kind = TOK_PIPEPIPE;strncpy(l->cur.text, "||", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_PIPEPIPE;strcpy_s(l->cur.text, sizeof(l->cur.text), "||"); l->pos = p+2; return; }
     if (s[p] == '=' && s[p+1] == '=')
-    { l->cur.kind = TOK_EQ;      strncpy(l->cur.text, "==", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_EQ;      strcpy_s(l->cur.text, sizeof(l->cur.text), "=="); l->pos = p+2; return; }
     if (s[p] == '!' && s[p+1] == '=')
-    { l->cur.kind = TOK_NEQ;     strncpy(l->cur.text, "!=", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_NEQ;     strcpy_s(l->cur.text, sizeof(l->cur.text), "!="); l->pos = p+2; return; }
     if (s[p] == '<' && s[p+1] == '=')
-    { l->cur.kind = TOK_LE;      strncpy(l->cur.text, "<=", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_LE;      strcpy_s(l->cur.text, sizeof(l->cur.text), "<="); l->pos = p+2; return; }
     if (s[p] == '>' && s[p+1] == '=')
-    { l->cur.kind = TOK_GE;      strncpy(l->cur.text, ">=", sizeof(l->cur.text)-1); l->pos = p+2; return; }
+    { l->cur.kind = TOK_GE;      strcpy_s(l->cur.text, sizeof(l->cur.text), ">="); l->pos = p+2; return; }
 
     /* Single-char operators */
     switch (s[p])
@@ -218,7 +219,7 @@ static expr_val_t parse_assign_expr(lex_t *l); /* forward */
 static expr_val_t make_err(const char *msg)
 {
     expr_val_t v = {0};
-    strncpy(v.errmsg, msg, sizeof(v.errmsg) - 1);
+    strncpy_s(v.errmsg, sizeof(v.errmsg), msg, _TRUNCATE);
     return v;
 }
 
@@ -273,14 +274,14 @@ static int try_parse_typename(lex_t *l, int *out_is_pointer)
 
     /* Accept optional: unsigned, signed, long, short */
     char base[128] = {0};
-    strncpy(base, l->cur.text, sizeof(base) - 1);
+    strncpy_s(base, sizeof(base), l->cur.text, _TRUNCATE);
 
     /* multi-word types: "unsigned long long", etc. */
     int sz = -1;
 
     /* Try to consume type words */
     char full[256] = {0};
-    strncpy(full, l->cur.text, sizeof(full) - 1);
+    strncpy_s(full, sizeof(full), l->cur.text, _TRUNCATE);
     lex_advance(l);
 
     /* Allow one more word (e.g. "unsigned int", "long long") */
@@ -289,14 +290,14 @@ static int try_parse_typename(lex_t *l, int *out_is_pointer)
          strcmp(l->cur.text,"short")==0 || strcmp(l->cur.text,"long")==0  ||
          strcmp(l->cur.text,"double")==0))
     {
-        strncat(full, " ", sizeof(full)-strlen(full)-1);
-        strncat(full, l->cur.text, sizeof(full)-strlen(full)-1);
+        strncat_s(full, sizeof(full), " ", _TRUNCATE);
+        strncat_s(full, sizeof(full), l->cur.text, _TRUNCATE);
         lex_advance(l);
         /* yet another "long" for "long long" */
         if (l->cur.kind == TOK_IDENT && strcmp(l->cur.text,"long")==0)
         {
             strncat(full, " ", sizeof(full)-strlen(full)-1);
-            strncat(full, l->cur.text, sizeof(full)-strlen(full)-1);
+        strncat_s(full, sizeof(full), l->cur.text, _TRUNCATE);
             lex_advance(l);
         }
     }
@@ -376,7 +377,7 @@ static expr_val_t parse_primary(lex_t *l)
     if (l->cur.kind == TOK_IDENT)
     {
         char name[128];
-        strncpy(name, l->cur.text, sizeof(name)-1);
+        strncpy_s(name, sizeof(name), l->cur.text, _TRUNCATE);
         lex_advance(l);
 
         DWORD64 addr = 0, modbase = 0;
@@ -526,7 +527,7 @@ static expr_val_t parse_postfix(lex_t *l)
             if (l->cur.kind != TOK_IDENT)
                 return make_err("expected member name");
             char member[128];
-            strncpy(member, l->cur.text, sizeof(member)-1);
+            strncpy_s(member, sizeof(member), l->cur.text, _TRUNCATE);
             lex_advance(l);
 
             DWORD64 base_addr = v.addr;
@@ -852,7 +853,7 @@ static int expr_lookup_symbol(debugger_t *dbg, const char *name,
                               DWORD *out_typeid, ULONG *out_size)
 {
     enum_ctx_t ctx = {0};
-    strncpy(ctx.target, name, sizeof(ctx.target) - 1);
+    strncpy_s(ctx.target, sizeof(ctx.target), name, _TRUNCATE);
     SymEnumSymbols(dbg->sym_handle, 0, "*", enum_sym_cb, &ctx);
 
     if (!ctx.found)
@@ -984,7 +985,7 @@ eval_status_t expr_eval(debugger_t *dbg, const char *expr, expr_val_t *out)
 {
     if (!dbg->thread || !dbg->process)
     {
-        strncpy(out->errmsg, "no active process", sizeof(out->errmsg)-1);
+        strncpy_s(out->errmsg, sizeof(out->errmsg), "no active process", _TRUNCATE);
         return EVAL_ERR;
     }
 
@@ -1008,7 +1009,7 @@ eval_status_t expr_eval(debugger_t *dbg, const char *expr, expr_val_t *out)
     if (l.err || *out->errmsg)
     {
         if (!*out->errmsg)
-            strncpy(out->errmsg, l.errmsg, sizeof(out->errmsg)-1);
+            strncpy_s(out->errmsg, sizeof(out->errmsg), l.errmsg, _TRUNCATE);
         return EVAL_ERR;
     }
     return EVAL_OK;
@@ -1018,26 +1019,53 @@ eval_status_t expr_eval(debugger_t *dbg, const char *expr, expr_val_t *out)
 /* Print helpers (same style as original print_variable)              */
 /* ------------------------------------------------------------------ */
 static void print_int_fmt(const char *label, long long value,
-                          ULONG byte_size, print_fmt_t fmt);
+                          ULONG byte_size, print_fmt_t fmt, int newline,
+                          const char *type_name);
+
+static void get_type_name(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
+                          char *buf, size_t buflen)
+{
+    buf[0] = '\0';
+    if (!modbase || !type_id) return;
+    WCHAR *wname = NULL;
+    if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMNAME, &wname)
+        && wname)
+    {
+        WideCharToMultiByte(CP_ACP, 0, wname, -1, buf, (int)buflen, NULL, NULL);
+        LocalFree(wname);
+    }
+}
 
 static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
                              DWORD64 base_addr, int depth, print_fmt_t fmt);
 
 static void print_val(debugger_t *dbg, const char *label,
                       DWORD64 modbase, DWORD type_id, ULONG byte_size,
-                      DWORD64 addr, long long value, int depth, print_fmt_t fmt)
+                      DWORD64 addr, long long value, int depth, print_fmt_t fmt,
+                      int newline)
 {
+    const char *nl = newline ? "\n" : "";
     DWORD tag = 0;
     SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMTAG, &tag);
 
     char indent[64] = {0};
     for (int i = 0; i < depth && i < 30; i++) { indent[i*2] = ' '; indent[i*2+1] = ' '; }
 
+    char tname[128] = {0};
+    if (dbg->print_pretty)
+        get_type_name(dbg, modbase, type_id, tname, sizeof(tname));
+
+    char ilabel[512];
+    snprintf(ilabel, sizeof(ilabel), "%s%s", indent, label);
+
     if (tag == SYM_TAG_UDT)
     {
-        printf("%s%s = {\n", indent, label);
+        if (tname[0])
+            printf("%s = (%s) {%s", ilabel, tname, nl);
+        else
+            printf("%s = {%s", ilabel, nl);
         print_struct_ex(dbg, modbase, type_id, addr, depth + 1, fmt);
-        printf("%s}\n", indent);
+        printf("%s}%s", indent, nl);
         return;
     }
     if (tag == SYM_TAG_POINTER)
@@ -1068,8 +1096,6 @@ static void print_val(debugger_t *dbg, const char *label,
                             (pt_basetype == 3 || pt_basetype == 5)) ||
                            (pt_len == 1) ||
                            (orig_len2 == 1));
-        char ilabel[256];
-        snprintf(ilabel, sizeof(ilabel), "%s%s", indent, label);
         if (is_char_ptr && fmt != FMT_HEX && fmt != FMT_DEC &&
             fmt != FMT_OCT && fmt != FMT_BIN)
         {
@@ -1080,13 +1106,22 @@ static void print_val(debugger_t *dbg, const char *label,
                 ReadProcessMemory(dbg->process, (void*)(DWORD64)value,
                                   strbuf, sizeof(strbuf)-1, &nr);
             strbuf[sizeof(strbuf)-1] = '\0';
-            printf("%s = 0x%llx \"%s\"\n", ilabel,
-                   (unsigned long long)value, value ? strbuf : "");
+            if (tname[0])
+                printf("%s = (%s) 0x%llx \"%s\"%s", ilabel, tname,
+                       (unsigned long long)value, value ? strbuf : "", nl);
+            else
+                printf("%s = 0x%llx \"%s\"%s", ilabel,
+                       (unsigned long long)value, value ? strbuf : "", nl);
         }
         else if (fmt == FMT_DEFAULT || fmt == FMT_HEX)
-            printf("%s = 0x%llx\n", ilabel, (unsigned long long)value);
+        {
+            if (tname[0])
+                printf("%s = (%s) 0x%llx%s", ilabel, tname, (unsigned long long)value, nl);
+            else
+                printf("%s = 0x%llx%s", ilabel, (unsigned long long)value, nl);
+        }
         else
-            print_int_fmt(ilabel, value, byte_size, fmt);
+            print_int_fmt(ilabel, value, byte_size, fmt, newline, tname);
         return;
     }
     {
@@ -1115,21 +1150,36 @@ static void print_val(debugger_t *dbg, const char *label,
             if (orig_len3 == 1) is_char = 1;
         }
 
-        char ilabel[256];
-        snprintf(ilabel, sizeof(ilabel), "%s%s", indent, label);
         if (fmt == FMT_DEFAULT)
         {
             if (is_char)
-                printf("%s = %d '%c'\n", ilabel, (int)(value & 0xff), (int)(value & 0xff));
+            {
+                if (tname[0])
+                    printf("%s = (%s) %d '%c'%s", ilabel, tname, (int)(value & 0xff), (int)(value & 0xff), nl);
+                else
+                    printf("%s = %d '%c'%s", ilabel, (int)(value & 0xff), (int)(value & 0xff), nl);
+            }
             else if (byte_size <= 4)
-                printf("%s = %d (0x%x)\n", ilabel,
-                       (int)value, (unsigned int)(unsigned long long)value);
+            {
+                if (tname[0])
+                    printf("%s = (%s) %d (0x%x)%s", ilabel, tname,
+                           (int)value, (unsigned int)(unsigned long long)value, nl);
+                else
+                    printf("%s = %d (0x%x)%s", ilabel,
+                           (int)value, (unsigned int)(unsigned long long)value, nl);
+            }
             else
-                printf("%s = %lld (0x%llx)\n", ilabel,
-                       value, (unsigned long long)value);
+            {
+                if (tname[0])
+                    printf("%s = (%s) %lld (0x%llx)%s", ilabel, tname,
+                           value, (unsigned long long)value, nl);
+                else
+                    printf("%s = %lld (0x%llx)%s", ilabel,
+                           value, (unsigned long long)value, nl);
+            }
         }
         else
-            print_int_fmt(ilabel, value, byte_size, fmt);
+            print_int_fmt(ilabel, value, byte_size, fmt, newline, tname);
     }
 }
 
@@ -1174,62 +1224,83 @@ static void print_struct_ex(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
         SIZE_T n;
         ReadProcessMemory(dbg->process, (void*)member_addr, &val, (SIZE_T)child_len, &n);
 
+        int pretty = dbg->print_pretty;
+        int member_nl = pretty ? 1 : 0;
         print_val(dbg, aname, modbase, child_type, (ULONG)child_len,
-                  member_addr, (long long)val, depth, fmt);
+                  member_addr, (long long)val, depth, fmt, member_nl);
+        if (!pretty && i + 1 < child_count)
+            printf(", ");
     }
     free(p);
 }
 
 /* Format a single integer value according to fmt */
 static void print_int_fmt(const char *label, long long value,
-                          ULONG byte_size, print_fmt_t fmt)
+                          ULONG byte_size, print_fmt_t fmt, int newline,
+                          const char *type_name)
 {
+    const char *nl = newline ? "\n" : "";
     unsigned long long uv = (unsigned long long)value;
+    char lbl[512];
+    if (type_name && type_name[0])
+        snprintf(lbl, sizeof(lbl), "%s = (%s)", label, type_name);
+    else
+        snprintf(lbl, sizeof(lbl), "%s =", label);
     switch (fmt)
     {
     case FMT_HEX:
-        printf("%s = 0x%llx\n", label, uv);
+        printf("%s 0x%llx%s", lbl, uv, nl);
         break;
     case FMT_OCT:
-        printf("%s = 0%llo\n", label, uv);
+        printf("%s 0%llo%s", lbl, uv, nl);
         break;
     case FMT_BIN:
     {
         int bits = (byte_size > 0 && byte_size <= 8) ? (int)byte_size * 8 : 64;
-        printf("%s = 0b", label);
+        printf("%s 0b", lbl);
         for (int b = bits - 1; b >= 0; b--)
             putchar((uv >> b) & 1 ? '1' : '0');
-        printf("\n");
+        printf("%s", nl);
         break;
     }
     case FMT_CHAR:
-        printf("%s = '%c' (%lld)\n", label, (int)(value & 0xff), value);
+        printf("%s '%c' (%lld)%s", lbl, (int)(value & 0xff), value, nl);
         break;
     case FMT_DEC:
         if (byte_size <= 4)
-            printf("%s = %d\n", label, (int)value);
+            printf("%s %d%s", lbl, (int)value, nl);
         else
-            printf("%s = %lld\n", label, value);
+            printf("%s %lld%s", lbl, value, nl);
         break;
     default: /* FMT_DEFAULT */
         if (byte_size <= 4)
-            printf("%s = %d (0x%x)\n", label,
-                   (int)value, (unsigned int)uv);
+            printf("%s %d (0x%x)%s", lbl,
+                   (int)value, (unsigned int)uv, nl);
         else
-            printf("%s = %lld (0x%llx)\n", label, value, uv);
+            printf("%s %lld (0x%llx)%s", lbl, value, uv, nl);
         break;
     }
 }
 
 /* Read a null-terminated string from debuggee memory */
-static void print_string_fmt(debugger_t *dbg, const char *label, DWORD64 addr)
+static void print_string_fmt(debugger_t *dbg, const char *label, DWORD64 addr,
+                              const char *type_name)
 {
-    if (!addr) { printf("%s = (null)\n", label); return; }
+    if (!addr) {
+        if (type_name && type_name[0])
+            printf("%s = (%s) (null)\n", label, type_name);
+        else
+            printf("%s = (null)\n", label);
+        return;
+    }
     char buf[256] = {0};
     SIZE_T n = 0;
     ReadProcessMemory(dbg->process, (void*)addr, buf, sizeof(buf)-1, &n);
     buf[sizeof(buf)-1] = '\0';
-    printf("%s = \"%s\"\n", label, buf);
+    if (type_name && type_name[0])
+        printf("%s = (%s) \"%s\"\n", label, type_name, buf);
+    else
+        printf("%s = \"%s\"\n", label, buf);
 }
 
 void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
@@ -1241,10 +1312,17 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         return;
     }
 
+    char top_tname[128] = {0};
+    if (dbg->print_pretty && v.mod_base && v.type_id)
+        get_type_name(dbg, v.mod_base, v.type_id, top_tname, sizeof(top_tname));
+
+    char top_label[512];
+    snprintf(top_label, sizeof(top_label), "%s", expr_str);
+
     /* /s: treat value as pointer to string */
     if (fmt == FMT_STR)
     {
-        print_string_fmt(dbg, expr_str, (DWORD64)v.value);
+        print_string_fmt(dbg, top_label, (DWORD64)v.value, top_tname);
         return;
     }
 
@@ -1270,29 +1348,62 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type,
             TI_GET_SYMTAG, &elem_tag);
 
-        printf("%s = {\n", expr_str);
-        for (DWORD i = 0; i < count; i++)
+        if (dbg->print_pretty)
         {
-            DWORD64 ea = v.addr + i * elem_len;
-            char idx[32];
-            snprintf(idx, sizeof(idx), "[%u]", i);
-            if (elem_tag == SYM_TAG_UDT)
-            {
-                printf("  %s = {\n", idx);
-                print_struct_ex(dbg, v.mod_base, elem_type, ea, 2, FMT_DEFAULT);
-                printf("  }\n");
-            }
+            if (top_tname[0])
+                printf("%s = (%s) {\n", top_label, top_tname);
             else
+                printf("%s = {\n", top_label);
+            for (DWORD i = 0; i < count; i++)
             {
-                unsigned long long val = 0; SIZE_T n;
-                ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
-                if (elem_len <= 4)
-                    printf("  [%u] = %d (0x%x)\n", i, (int)val, (unsigned int)val);
+                DWORD64 ea = v.addr + i * elem_len;
+                char idx[32];
+                snprintf(idx, sizeof(idx), "[%u]", i);
+                if (elem_tag == SYM_TAG_UDT)
+                {
+                    printf("  %s = {\n", idx);
+                    print_struct_ex(dbg, v.mod_base, elem_type, ea, 2, FMT_DEFAULT);
+                    printf("  }\n");
+                }
                 else
-                    printf("  [%u] = %lld (0x%llx)\n", i, (long long)val, val);
+                {
+                    unsigned long long val = 0; SIZE_T n;
+                    ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                    if (elem_len <= 4)
+                        printf("  [%u] = %d (0x%x)\n", i, (int)val, (unsigned int)val);
+                    else
+                        printf("  [%u] = %lld (0x%llx)\n", i, (long long)val, val);
+                }
             }
+            printf("}\n");
         }
-        printf("}\n");
+        else
+        {
+            printf("%s = { ", top_label);
+            for (DWORD i = 0; i < count; i++)
+            {
+                DWORD64 ea = v.addr + i * elem_len;
+                char idx[32];
+                snprintf(idx, sizeof(idx), "[%u]", i);
+                if (elem_tag == SYM_TAG_UDT)
+                {
+                    printf("%s = { ", idx);
+                    print_struct_ex(dbg, v.mod_base, elem_type, ea, 2, FMT_DEFAULT);
+                    printf(" }");
+                }
+                else
+                {
+                    unsigned long long val = 0; SIZE_T n;
+                    ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                    if (elem_len <= 4)
+                        printf("[%u] = %d (0x%x)", i, (int)val, (unsigned int)val);
+                    else
+                        printf("[%u] = %lld (0x%llx)", i, (long long)val, val);
+                }
+                if (i + 1 < count) printf(", ");
+            }
+            printf(" }\n");
+        }
         return;
     }
 
@@ -1306,25 +1417,82 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_LENGTH, &elem_len);
         if (elem_len == 0) elem_len = 4;
         DWORD count = (DWORD)(total / elem_len);
-        printf("%s = {\n", expr_str);
-        for (DWORD i = 0; i < count; i++)
+        if (dbg->print_pretty)
         {
-            DWORD64 ea = v.addr + i * elem_len;
-            unsigned long long val = 0; SIZE_T n;
-            ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
-            char idx[32]; snprintf(idx, sizeof(idx), "  [%u]", i);
-            print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt);
+            if (top_tname[0])
+                printf("%s = (%s) {\n", top_label, top_tname);
+            else
+                printf("%s = {\n", top_label);
+            for (DWORD i = 0; i < count; i++)
+            {
+                DWORD64 ea = v.addr + i * elem_len;
+                unsigned long long val = 0; SIZE_T n;
+                ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                char idx[32]; snprintf(idx, sizeof(idx), "  [%u]", i);
+                print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt, 1, NULL);
+            }
+            printf("}\n");
         }
-        printf("}\n");
+        else
+        {
+            printf("%s = { ", top_label);
+            for (DWORD i = 0; i < count; i++)
+            {
+                DWORD64 ea = v.addr + i * elem_len;
+                unsigned long long val = 0; SIZE_T n;
+                ReadProcessMemory(dbg->process, (void*)ea, &val, (SIZE_T)elem_len, &n);
+                if (i > 0) printf(", ");
+                if (fmt == FMT_HEX)
+                    printf("[%u] = 0x%llx", i, (unsigned long long)val);
+                else if (fmt == FMT_OCT)
+                    printf("[%u] = 0%llo", i, (unsigned long long)val);
+                else if (fmt == FMT_BIN)
+                {
+                    int bits = (elem_len > 0 && elem_len <= 8) ? (int)elem_len * 8 : 64;
+                    printf("[%u] = 0b", i);
+                    for (int b = bits - 1; b >= 0; b--)
+                        putchar(((val >> b) & 1) ? '1' : '0');
+                }
+                else if (fmt == FMT_DEC)
+                {
+                    if (elem_len <= 4)
+                        printf("[%u] = %d", i, (int)(long long)val);
+                    else
+                        printf("[%u] = %lld", i, (long long)val);
+                }
+                else if (fmt == FMT_CHAR)
+                    printf("[%u] = '%c' (%lld)", i, (int)(val & 0xff), (long long)val);
+                else /* FMT_DEFAULT */
+                {
+                    if (elem_len <= 4)
+                        printf("[%u] = %d (0x%x)", i, (int)val, (unsigned int)val);
+                    else
+                        printf("[%u] = %lld (0x%llx)", i, (long long)val, val);
+                }
+            }
+            printf(" }\n");
+        }
         return;
     }
 
     /* UDT: always show struct members, apply fmt to each member value */
     if (tag == SYM_TAG_UDT)
     {
-        printf("%s = {\n", expr_str);
-        print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);
-        printf("}\n");
+        if (dbg->print_pretty)
+        {
+            if (top_tname[0])
+                printf("%s = (%s) {\n", top_label, top_tname);
+            else
+                printf("%s = {\n", top_label);
+            print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);
+            printf("}\n");
+        }
+        else
+        {
+            printf("%s = { ", top_label);
+            print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);
+            printf(" }\n");
+        }
         return;
     }
 
@@ -1373,13 +1541,22 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 ReadProcessMemory(dbg->process, (void*)(DWORD64)v.value,
                                   strbuf, sizeof(strbuf)-1, &nr);
             strbuf[sizeof(strbuf)-1] = '\0';
-            printf("%s = 0x%llx \"%s\"\n", expr_str,
-                   (unsigned long long)v.value, v.value ? strbuf : "");
+            if (top_tname[0])
+                printf("%s = (%s) 0x%llx \"%s\"\n", top_label, top_tname,
+                       (unsigned long long)v.value, v.value ? strbuf : "");
+            else
+                printf("%s = 0x%llx \"%s\"\n", top_label,
+                       (unsigned long long)v.value, v.value ? strbuf : "");
         }
         else if (fmt == FMT_DEFAULT || fmt == FMT_HEX)
-            printf("%s = 0x%llx\n", expr_str, (unsigned long long)v.value);
+        {
+            if (top_tname[0])
+                printf("%s = (%s) 0x%llx\n", top_label, top_tname, (unsigned long long)v.value);
+            else
+                printf("%s = 0x%llx\n", top_label, (unsigned long long)v.value);
+        }
         else
-            print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+            print_int_fmt(top_label, v.value, v.byte_size, fmt, 1, top_tname);
         return;
     }
 
@@ -1405,10 +1582,16 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         if (!is_char && v.byte_size == 1) is_char = 1;
 
         if (is_char && fmt == FMT_DEFAULT)
-            printf("%s = %d '%c'\n", expr_str,
-                   (int)(v.value & 0xff), (int)(v.value & 0xff));
+        {
+            if (top_tname[0])
+                printf("%s = (%s) %d '%c'\n", top_label, top_tname,
+                       (int)(v.value & 0xff), (int)(v.value & 0xff));
+            else
+                printf("%s = %d '%c'\n", top_label,
+                       (int)(v.value & 0xff), (int)(v.value & 0xff));
+        }
         else
-            print_int_fmt(expr_str, v.value, v.byte_size, fmt);
+            print_int_fmt(top_label, v.value, v.byte_size, fmt, 1, top_tname);
     }
 }
 

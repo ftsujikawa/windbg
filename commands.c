@@ -24,7 +24,8 @@ void command_loop(debugger_t *dbg)
         {
             char arg[128];
 
-            sscanf(line,"%*s %s",arg);
+            /* use secure variant to avoid deprecated sscanf */
+            sscanf_s(line, "%*s %127s", arg, (unsigned)sizeof(arg));
 
             void *addr=NULL;
 
@@ -42,7 +43,7 @@ void command_loop(debugger_t *dbg)
             {
                 unsigned long long x;
 
-                sscanf(arg,"%llx",&x);
+                sscanf_s(arg, "%llx", &x);
 
                 addr=(void*)x;
             }
@@ -75,7 +76,7 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line, "x", 1) == 0)
         {
             char arg[256] = {0};
-            sscanf(line, "%*s %255[^\n]", arg);
+            sscanf_s(line, "%*s %255[^\n]", arg, (unsigned)sizeof(arg));
 
             unsigned long long addr = 0;
             if (strncmp(arg, "rsp+", 4) == 0 ||
@@ -98,7 +99,7 @@ void command_loop(debugger_t *dbg)
             }
             else
             {
-                sscanf(arg, "%llx", &addr);
+                sscanf_s(arg, "%llx", &addr);
             }
 
             examine_memory(dbg, (void*)addr);
@@ -114,7 +115,7 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line,"syms ",5)==0)
         {
             char name[128] = {0};
-            sscanf(line, "syms %127s", name);
+            sscanf_s(line, "syms %127s", name, (unsigned)sizeof(name));
             if (name[0])
                 print_symbol_info(dbg, name);
             else
@@ -177,7 +178,7 @@ void command_loop(debugger_t *dbg)
                      || line[1] == ' ')))
         {
             char arg[256] = {0};
-            sscanf(line, "%*s %255[^\n]", arg);
+            sscanf_s(line, "%*s %255[^\n]", arg, (unsigned)sizeof(arg));
 
             if (arg[0] != '\0')
             {
@@ -264,6 +265,32 @@ void command_loop(debugger_t *dbg)
                 {
                     printf("(no source info)\n");
                 }
+            }
+        }
+
+        else if (strncmp(line, "set print pretty", 16) == 0)
+        {
+            const char *p = line + 16;
+            while (*p == ' ') p++;
+            char *nl = strchr((char*)p, '\n'); if (nl) *nl = '\0';
+            char *cr = strchr((char*)p, '\r'); if (cr) *cr = '\0';
+            if (p[0] == '\0')
+            {
+                printf("print pretty is %s\n", dbg->print_pretty ? "on" : "off");
+            }
+            else if (_stricmp(p, "on") == 0 || strcmp(p, "1") == 0)
+            {
+                dbg->print_pretty = 1;
+                printf("print pretty is now on\n");
+            }
+            else if (_stricmp(p, "off") == 0 || strcmp(p, "0") == 0)
+            {
+                dbg->print_pretty = 0;
+                printf("print pretty is now off\n");
+            }
+            else
+            {
+                printf("usage: set print pretty [on|off]\n");
             }
         }
 
@@ -385,7 +412,7 @@ void command_loop(debugger_t *dbg)
         else if (strncmp(line, "dis", 3) == 0)
         {
             char arg[256] = {0};
-            sscanf(line, "%*s %255[^\n]", arg);
+            sscanf_s(line, "%*s %255[^\n]", arg, (unsigned)sizeof(arg));
 
             if (arg[0] == '\0')
             {
@@ -409,7 +436,7 @@ void command_loop(debugger_t *dbg)
                 else if (strncmp(arg, "0x", 2) == 0)
                 {
                     unsigned long long x;
-                    sscanf(arg, "%llx", &x);
+                    sscanf_s(arg, "%llx", &x);
                     addr = (void*)x;
                 }
                 else
@@ -471,6 +498,21 @@ void command_loop(debugger_t *dbg)
             print_line_info(dbg, filter);
         }
 
+        else if (strncmp(line, "show ", 5) == 0
+                 || strcmp(line, "show\n") == 0
+                 || strcmp(line, "show\r\n") == 0
+                 || strcmp(line, "show") == 0)
+        {
+            char what[128] = {0};
+            if (line[4] == ' ')
+            {
+                strncpy(what, line + 5, sizeof(what) - 1);
+                char *nl = strchr(what, '\n'); if (nl) *nl = '\0';
+                char *cr = strchr(what, '\r'); if (cr) *cr = '\0';
+            }
+            show_variables(dbg, what);
+        }
+
         else if (strncmp(line, "run", 3) == 0)
         {
             if (dbg->target_program[0] == '\0')
@@ -483,6 +525,29 @@ void command_loop(debugger_t *dbg)
                 debugger_restart(dbg);
                 return;
             }
+        }
+
+        else if (strncmp(line, "help", 4) == 0
+                 || strcmp(line, "h\n") == 0
+                 || strcmp(line, "h\r\n") == 0)
+        {
+            printf("Available commands:\n");
+            printf("  break <addr|symbol|file:line>  -- set a breakpoint\n");
+            printf("  b <addr|symbol|file:line>      -- alias for break\n");
+            printf("  regs                           -- show registers\n");
+            printf("  si                             -- single step\n");
+            printf("  n                              -- step over (next)\n");
+            printf("  x <addr|expr>                  -- examine memory\n");
+            printf("  continue / c                   -- continue execution\n");
+            printf("  print [/fmt] <expr>            -- print expression value\n");
+            printf("  p [/fmt] <expr>                -- alias for print\n");
+            printf("  set print pretty [on|off]      -- toggle pretty printing\n");
+            printf("  show [locals|args|globals]     -- show variables\n");
+            printf("  tb                             -- print backtrace\n");
+            printf("  lines [filter]                 -- show source lines\n");
+            printf("  run                            -- restart target program\n");
+            printf("  help / h                       -- show this help\n");
+            printf("  quit                           -- exit debugger\n");
         }
 
         else if (strncmp(line, "quit", 4) == 0)

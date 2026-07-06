@@ -70,4 +70,9 @@ void print_line_info(
     const char *filename_filter
 );
 
+void show_variables(
+    debugger_t *dbg,
+    const char *what
+);
+
 #endif
