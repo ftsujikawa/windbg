@@ -1190,6 +1190,9 @@ static const char *basetype_name(DWORD basetype, ULONG len)
     }
 }
 
+/* Forward declaration: defined later in this file */
+static const char *udt_kind_prefix(debugger_t *dbg, DWORD64 modbase, DWORD type_id);
+
 /* Resolve a printable C-style type name for any type_id: base types are
  * named from their BasicType+size, pointers/arrays are built up
  * recursively from their pointed-to/element type, everything else
@@ -1239,7 +1242,23 @@ static void get_type_name(debugger_t *dbg, DWORD64 modbase, DWORD type_id,
         return;
     }
 
-    /* UDT / Enum / Typedef / others: use the symbol's own name */
+    /* UDT: include struct/union prefix */
+    if (tag == SYM_TAG_UDT)
+    {
+        const char *prefix = udt_kind_prefix(dbg, modbase, type_id);
+        WCHAR *wname = NULL;
+        if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMNAME, &wname)
+            && wname)
+        {
+            char name[112] = {0};
+            WideCharToMultiByte(CP_ACP, 0, wname, -1, name, sizeof(name), NULL, NULL);
+            snprintf(buf, buflen, "%s%s", prefix, name);
+            LocalFree(wname);
+        }
+        return;
+    }
+
+    /* Enum / Typedef / others: use the symbol's own name */
     WCHAR *wname = NULL;
     if (SymGetTypeInfo(dbg->sym_handle, modbase, type_id, TI_GET_SYMNAME, &wname)
         && wname)
@@ -1289,8 +1308,7 @@ static void print_val(debugger_t *dbg, const char *label,
     if (tag == SYM_TAG_UDT)
     {
         if (tname[0])
-            printf("%s = (%s%s) {%s", ilabel,
-                udt_kind_prefix(dbg, modbase, type_id), tname, nl);
+            printf("%s = (%s) {%s", ilabel, tname, nl);
         else
             printf("%s = {%s", ilabel, nl);
         print_struct_ex(dbg, modbase, type_id, addr, depth + 1, fmt);
@@ -1946,8 +1964,7 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         if (dbg->print_pretty)
         {
             if (top_tname[0])
-                printf("%s = (%s%s) {\n", top_label,
-                    udt_kind_prefix(dbg, v.mod_base, v.type_id), top_tname);
+                printf("%s = (%s) {\n", top_label, top_tname);
             else
                 printf("%s = {\n", top_label);
             print_struct_ex(dbg, v.mod_base, v.type_id, v.addr, 1, fmt);
