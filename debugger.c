@@ -383,7 +383,7 @@ void debugger_loop(debugger_t *dbg)
                     DBG_CONTINUE
                 );
 
-                printf("(mini-gdb) process has exited. type 'quit' to exit.\n");
+                printf("(tdb) process has exited. type 'quit' to exit.\n");
                 command_loop(dbg);
                 return;
         }

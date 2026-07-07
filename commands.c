@@ -16,7 +16,7 @@ void command_loop(debugger_t *dbg)
 
     while (1)
     {
-        printf("(mini-gdb) ");
+        printf("(tdb) ");
 
         fgets(line, sizeof(line), stdin);
 
