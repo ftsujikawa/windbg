@@ -736,6 +736,9 @@ static expr_val_t parse_unary(lex_t *l)
             return make_err("& requires lvalue");
         expr_val_t r = make_val((long long)inner.addr);
         r.byte_size = 8;
+        r.is_address = 1;
+        r.mod_base = inner.mod_base;
+        r.type_id  = inner.type_id;
         return r;
     }
 
@@ -1691,6 +1694,19 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
 
     char top_label[512];
     snprintf(top_label, sizeof(top_label), "%s", expr_str);
+
+    /* Address-of: always show as a hex pointer, regardless of underlying type */
+    if (v.is_address && (fmt == FMT_DEFAULT || fmt == FMT_HEX))
+    {
+        char base_name[128] = {0};
+        if (v.mod_base && v.type_id)
+            get_type_name(dbg, v.mod_base, v.type_id, base_name, sizeof(base_name));
+        if (base_name[0])
+            printf("%s = (%s *) 0x%llx\n", top_label, base_name, (unsigned long long)v.value);
+        else
+            printf("%s = 0x%llx\n", top_label, (unsigned long long)v.value);
+        return;
+    }
 
     /* /s: treat value as pointer to string */
     if (fmt == FMT_STR)

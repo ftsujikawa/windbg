@@ -567,6 +567,7 @@ void command_loop(debugger_t *dbg)
             printf("  print [/fmt] <expr>            -- print expression value\n");
             printf("  p [/fmt] <expr>                -- alias for print\n");
             printf("  set print pretty [on|off]      -- toggle pretty printing\n");
+            printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
             printf("  leak [on|off]                  -- toggle malloc/free leak tracking\n");
             printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
             printf("  syms <name>                    -- show symbol details (address/size/type)\n");

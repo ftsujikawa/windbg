@@ -30,6 +30,9 @@ typedef struct {
     double    fvalue;
     int       is_float;
 
+    /* Set when the value is an address produced by the & operator */
+    int      is_address;
+
     /* Type info (may be 0 if unknown) */
     DWORD64  mod_base;
     DWORD    type_id;
