@@ -143,6 +143,51 @@ static void lex_advance(lex_t *l)
         return;
     }
 
+    /* Character literal like 'A' or '\n' */
+    if (s[p] == '\'')
+    {
+        p++;
+        char ch = 0;
+        if (s[p] == '\\')
+        {
+            p++;
+            switch (s[p])
+            {
+            case 'n':  ch = '\n'; break;
+            case 't':  ch = '\t'; break;
+            case 'r':  ch = '\r'; break;
+            case '0':  ch = '\0'; break;
+            case '\'': ch = '\''; break;
+            case '\\': ch = '\\'; break;
+            case 'a':  ch = '\a'; break;
+            case 'b':  ch = '\b'; break;
+            case 'f':  ch = '\f'; break;
+            case 'v':  ch = '\v'; break;
+            default:   ch = s[p]; break;
+            }
+            p++;
+        }
+        else
+        {
+            ch = s[p];
+            p++;
+        }
+        if (s[p] != '\'')
+        {
+            lex_error(l, "expected ' after character literal");
+            l->cur.kind = TOK_EOF;
+            return;
+        }
+        p++;
+        l->cur.kind = TOK_NUM;
+        l->cur.ival = (unsigned char)ch;
+        l->cur.fval = 0.0;
+        l->cur.is_float = 0;
+        snprintf(l->cur.text, sizeof(l->cur.text), "'%c'", ch);
+        l->pos = p;
+        return;
+    }
+
     /* Two-char operators */
     if (s[p] == '-' && s[p+1] == '>')
     { l->cur.kind = TOK_ARROW;   strcpy_s(l->cur.text, sizeof(l->cur.text), "->"); l->pos = p+2; return; }
@@ -1358,10 +1403,7 @@ static void print_val(debugger_t *dbg, const char *label,
         {
             if (is_char)
             {
-                if (tname[0])
-                    printf("%s = (%s) %d '%c'%s", ilabel, tname, (int)(value & 0xff), (int)(value & 0xff), nl);
-                else
-                    printf("%s = %d '%c'%s", ilabel, (int)(value & 0xff), (int)(value & 0xff), nl);
+                printf("%s = '%c' (0x%x)%s", ilabel, (int)(value & 0xff), (unsigned int)(value & 0xff), nl);
             }
             else if (byte_size <= 4)
             {
@@ -1624,6 +1666,17 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
         SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_LENGTH, &elem_len);
         if (elem_len == 0) elem_len = 4;
         DWORD count = (DWORD)(total / elem_len);
+
+        /* Determine whether the element type is a char type. */
+        DWORD elem_tag = 0, elem_bt = 0;
+        ULONG64 elem_len2 = 0;
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_SYMTAG, &elem_tag);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_BASETYPE, &elem_bt);
+        SymGetTypeInfo(dbg->sym_handle, v.mod_base, elem_type, TI_GET_LENGTH, &elem_len2);
+        int is_char_elem = (elem_tag == SYM_TAG_BASETYPE &&
+                            (elem_bt == 3 ||
+                             (elem_len2 == 1 && (elem_bt == 6 || elem_bt == 7))));
+
         if (dbg->print_pretty)
         {
             if (top_tname[0])
@@ -1637,7 +1690,10 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
                 ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                 char idx[32]; snprintf(idx, sizeof(idx), "  [%u]", i);
-                print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt, 1, NULL);
+                if (is_char_elem && fmt == FMT_DEFAULT)
+                    printf("%s = '%c' (0x%x)\n", idx, (int)(val & 0xff), (unsigned int)(val & 0xff));
+                else
+                    print_int_fmt(idx, (long long)val, (ULONG)elem_len, fmt, 1, NULL);
             }
             printf("}\n");
         }
@@ -1651,7 +1707,9 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
                 SIZE_T read_len = (elem_len > sizeof(val)) ? sizeof(val) : (SIZE_T)elem_len;
                 ReadProcessMemory(dbg->process, (void*)ea, &val, read_len, &n);
                 if (i > 0) printf(", ");
-                if (fmt == FMT_HEX)
+                if (is_char_elem && fmt == FMT_DEFAULT)
+                    printf("[%u] = '%c' (0x%x)", i, (int)(val & 0xff), (unsigned int)(val & 0xff));
+                else if (fmt == FMT_HEX)
                     printf("[%u] = 0x%llx", i, (unsigned long long)val);
                 else if (fmt == FMT_OCT)
                     printf("[%u] = 0%llo", i, (unsigned long long)val);
@@ -1793,12 +1851,8 @@ void expr_print_fmt(debugger_t *dbg, const char *expr_str, print_fmt_t fmt)
 
         if (is_char && fmt == FMT_DEFAULT)
         {
-            if (top_tname[0])
-                printf("%s = (%s) %d '%c'\n", top_label, top_tname,
-                       (int)(v.value & 0xff), (int)(v.value & 0xff));
-            else
-                printf("%s = %d '%c'\n", top_label,
-                       (int)(v.value & 0xff), (int)(v.value & 0xff));
+            printf("%s = '%c' (0x%x)\n", top_label,
+                   (int)(v.value & 0xff), (unsigned int)(v.value & 0xff));
         }
         else if (v.is_float && fmt == FMT_DEFAULT)
         {
