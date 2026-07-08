@@ -72,7 +72,18 @@ int remove_breakpoint_at(debugger_t *dbg, void *addr)
 {
     SIZE_T n;
 
-    breakpoint_t *bp = find_breakpoint(dbg, addr);
+    breakpoint_t **bpp = &dbg->breakpoints;
+    breakpoint_t *bp = NULL;
+    while (*bpp)
+    {
+        if ((*bpp)->addr == addr)
+        {
+            bp = *bpp;
+            *bpp = bp->next;
+            break;
+        }
+        bpp = &(*bpp)->next;
+    }
     if (bp == NULL)
         return -1;
 
@@ -90,6 +101,7 @@ int remove_breakpoint_at(debugger_t *dbg, void *addr)
         1
     );
 
+    free(bp);
     return 0;
 }
 

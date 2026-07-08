@@ -27,7 +27,11 @@ void command_loop(debugger_t *dbg)
             char arg[128];
 
             /* use secure variant to avoid deprecated sscanf */
-            sscanf_s(line, "%*s %127s", arg, (unsigned)sizeof(arg));
+            if (sscanf_s(line, "%*s %127s", arg, (unsigned)sizeof(arg)) != 1)
+            {
+                printf("usage: break <addr|symbol|file:line>\n");
+                continue;
+            }
 
             void *addr=NULL;
 
@@ -61,6 +65,58 @@ void command_loop(debugger_t *dbg)
             if(addr)
                 set_breakpoint(
                     dbg,addr);
+        }
+
+        else if (strncmp(line, "del", 3) == 0)
+        {
+            char arg[128];
+            /* use secure variant to avoid deprecated sscanf */
+            if (sscanf_s(line, "%*s %127s", arg, (unsigned)sizeof(arg)) != 1)
+            {
+                printf("usage: del <addr|symbol|file:line>\n");
+                continue;
+            }
+
+            void *addr=NULL;
+
+            char *colon = strchr(arg, ':');
+
+            if (colon != NULL)
+            {
+                *colon = '\0';
+                DWORD line_num = (DWORD)atoi(colon + 1);
+
+                addr = lookup_source_line_addr(
+                    dbg, arg, line_num);
+            }
+            else if (strncmp(arg,"0x",2)==0)
+            {
+                unsigned long long x;
+
+                sscanf_s(arg, "%llx", &x);
+
+                addr=(void*)x;
+            }
+            else
+            {
+                addr=lookup_symbol(
+                    dbg,arg);
+
+                if (addr)
+                    addr = skip_function_prologue(dbg, addr);
+            }
+
+            if(addr)
+            {
+                if (remove_breakpoint_at(dbg, addr) == 0)
+                    printf("breakpoint removed at %p\n", addr);
+                else
+                    printf("no breakpoint at %p\n", addr);
+            }
+            else
+            {
+                printf("could not resolve '%s'\n", arg);
+            }
         }
 
         else if (strncmp(line, "regs", 4) == 0)
@@ -558,27 +614,28 @@ void command_loop(debugger_t *dbg)
             printf("Available commands:\n");
             printf("  break <addr|symbol|file:line>  -- set a breakpoint\n");
             printf("  b <addr|symbol|file:line>      -- alias for break\n");
-            printf("  regs                           -- show registers\n");
-            printf("  si                             -- single step (one instruction)\n");
-            printf("  s / step                       -- step into (one source line)\n");
-            printf("  n                              -- step over (next source line)\n");
-            printf("  up                             -- run until the current function returns\n");
-            printf("  x <addr|expr>                  -- examine memory\n");
             printf("  continue / c                   -- continue execution\n");
-            printf("  print [/fmt] <expr>            -- print expression value\n");
-            printf("  p [/fmt] <expr>                -- alias for print\n");
-            printf("  set print pretty [on|off]      -- toggle pretty printing\n");
-            printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
+            printf("  del <addr|symbol|file:line>    -- delete a breakpoint\n");
+            printf("  dis [addr|symbol|file:line]    -- disassemble\n");
+            printf("  help / h                       -- show this help\n");
             printf("  leak [on|off]                  -- toggle malloc/free leak tracking\n");
-            printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
-            printf("  syms <name>                    -- show symbol details (address/size/type)\n");
-            printf("  tb                             -- print backtrace\n");
             printf("  list / l [line|file:line]      -- show source code around a line\n");
             printf("  lines [filter]                 -- show line number <-> address mapping\n");
-            printf("  dis [addr|symbol|file:line]    -- disassemble\n");
-            printf("  run                            -- restart target program\n");
-            printf("  help / h                       -- show this help\n");
+            printf("  n                              -- step over (next source line)\n");
+            printf("  print [/fmt] <expr>            -- print expression value\n");
+            printf("  p [/fmt] <expr>                -- alias for print\n");
             printf("  quit                           -- exit debugger\n");
+            printf("  regs                           -- show registers\n");
+            printf("  run                            -- restart target program\n");
+            printf("  s / step                       -- step into (one source line)\n");
+            printf("  set print pretty [on|off]      -- toggle pretty printing\n");
+            printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
+            printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
+            printf("  si                             -- single step (one instruction)\n");
+            printf("  syms <name>                    -- show symbol details (address/size/type)\n");
+            printf("  tb                             -- print backtrace\n");
+            printf("  up                             -- run until the current function returns\n");
+            printf("  x <addr|expr>                  -- examine memory\n");
         }
 
         else if (strncmp(line, "quit", 4) == 0)

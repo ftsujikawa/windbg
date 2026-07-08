@@ -63,6 +63,7 @@ int show_source_line(debugger_t *dbg, DWORD64 addr)
     if (!f)
     {
         printf("(cannot open %s)\n", line.FileName);
+        print_disassembly(dbg, addr, 1);
         return 1;
     }
 

@@ -193,9 +193,26 @@ void debugger_loop(debugger_t *dbg)
                     printf("stopped exception=0x%lx RIP=0x%llx\n",
                            ev.u.Exception.ExceptionRecord.ExceptionCode,
                            ctx.Rip);
-                    show_source_line(dbg, ctx.Rip);
+                    if (!show_source_line(dbg, ctx.Rip))
+                        print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;
                     command_loop(dbg);
+                    break;
+                }
+
+                /* Access violations in system CRT: ignore to allow continuation */
+                if (ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
+                {
+                    CONTEXT ctx = {0};
+                    ctx.ContextFlags = CONTEXT_FULL;
+                    GetThreadContext(dbg->thread, &ctx);
+                    printf("stopped exception=0x%lx RIP=0x%llx\n",
+                           ev.u.Exception.ExceptionRecord.ExceptionCode,
+                           ctx.Rip);
+                    fflush(stdout);
+                    if (!show_source_line(dbg, ctx.Rip))
+                        print_disassembly(dbg, ctx.Rip, 1);
+                    /* Do NOT enter command loop; continue execution */
                     break;
                 }
 
@@ -276,7 +293,7 @@ void debugger_loop(debugger_t *dbg)
 
                         printf("hit breakpoint at %p\n", hit_addr);
                         if (!show_source_line(dbg, ctx.Rip))
-                            print_disassembly(dbg, ctx.Rip, 10);
+                            print_disassembly(dbg, ctx.Rip, 1);
                         source_shown = 1;
                     }
                     else
@@ -286,7 +303,7 @@ void debugger_loop(debugger_t *dbg)
                          * OS when we continue with DBG_CONTINUE. */
                         printf("breakpoint at %p (not tracked)\n", hit_addr);
                         if (!show_source_line(dbg, ctx.Rip))
-                            print_disassembly(dbg, ctx.Rip, 10);
+                            print_disassembly(dbg, ctx.Rip, 1);
                         source_shown = 1;
                     }
                 }
@@ -386,6 +403,7 @@ void debugger_loop(debugger_t *dbg)
 
                     printf("step -> RIP=0x%llx\n", ctx.Rip);
                     show_source_line(dbg, ctx.Rip);
+                    print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;
                 }
 
@@ -400,7 +418,10 @@ void debugger_loop(debugger_t *dbg)
                     fflush(stdout);
 
                     if (!source_shown)
-                        show_source_line(dbg, ctx2.Rip);
+                    {
+                        if (!show_source_line(dbg, ctx2.Rip))
+                            print_disassembly(dbg, ctx2.Rip, 1);
+                    }
                 }
 
                 dbg->list_next_line = 0;
