@@ -17,6 +17,7 @@ void command_loop(debugger_t *dbg)
     while (1)
     {
         printf("(tdb) ");
+        fflush(stdout);
 
         fgets(line, sizeof(line), stdin);
 

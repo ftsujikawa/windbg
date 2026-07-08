@@ -8,6 +8,16 @@
 #include "symbols.h"
 #include "leakcheck.h"
 
+/* Console control handler: swallow Ctrl+C in the debugger itself.
+ * The debuggee, being in the same console group, receives the same event
+ * and reports it as DBG_CONTROL_C; debugger_loop treats that as a break-in. */
+static BOOL WINAPI ctrl_event_handler(DWORD ctrl_type)
+{
+    if (ctrl_type == CTRL_C_EVENT)
+        return TRUE;
+    return FALSE;
+}
+
 int debugger_start(debugger_t *dbg, const char *program)
 {
     STARTUPINFOA si = {0};
@@ -39,6 +49,10 @@ int debugger_start(debugger_t *dbg, const char *program)
     dbg->pid = pi.dwProcessId;
     dbg->tid = pi.dwThreadId;
     dbg->print_pretty = 1;
+
+    if (!SetConsoleCtrlHandler(ctrl_event_handler, TRUE))
+        printf("SetConsoleCtrlHandler failed: %lu\n", GetLastError());
+
     /* Must be the real debuggee handle, not GetCurrentProcess(): DbgHelp's
        .pdata (unwind info) lookups for StackWalk64 read the module image
        from whatever process handle Sym* calls were made with, and that
@@ -154,6 +168,10 @@ void debugger_loop(debugger_t *dbg)
                 
                 break;
 
+#ifndef DBG_CONTROL_C
+#define DBG_CONTROL_C 0x40010005
+#endif
+
             case EXCEPTION_DEBUG_EVENT:
 
                 printf(
@@ -164,6 +182,22 @@ void debugger_loop(debugger_t *dbg)
                     );
 
                 int source_shown = 0;
+
+                /* Ctrl+C sent to the debuggee: treat it as a break-in. */
+                if (ev.u.Exception.ExceptionRecord.ExceptionCode == DBG_CONTROL_C)
+                {
+                    CONTEXT ctx = {0};
+                    ctx.ContextFlags = CONTEXT_FULL;
+                    GetThreadContext(dbg->thread, &ctx);
+                    printf("Interrupted by Ctrl+C\n");
+                    printf("stopped exception=0x%lx RIP=0x%llx\n",
+                           ev.u.Exception.ExceptionRecord.ExceptionCode,
+                           ctx.Rip);
+                    show_source_line(dbg, ctx.Rip);
+                    source_shown = 1;
+                    command_loop(dbg);
+                    break;
+                }
 
                 if (dbg->leak_tracking &&
                     ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT)
@@ -247,7 +281,13 @@ void debugger_loop(debugger_t *dbg)
                     }
                     else
                     {
+                        /* Do not decrement Rip here: untracked breakpoints
+                         * such as the ntdll initial break are handled by the
+                         * OS when we continue with DBG_CONTINUE. */
                         printf("breakpoint at %p (not tracked)\n", hit_addr);
+                        if (!show_source_line(dbg, ctx.Rip))
+                            print_disassembly(dbg, ctx.Rip, 10);
+                        source_shown = 1;
                     }
                 }
 
@@ -357,6 +397,7 @@ void debugger_loop(debugger_t *dbg)
                     printf("stopped exception=0x%lx RIP=0x%llx\n",
                         ev.u.Exception.ExceptionRecord.ExceptionCode,
                         ctx2.Rip);
+                    fflush(stdout);
 
                     if (!source_shown)
                         show_source_line(dbg, ctx2.Rip);

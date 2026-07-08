@@ -59,5 +59,10 @@ int main(void)
 
     printf("g_counter = %d\n", g_counter);
 
+    int i = 0;
+    while(1) {
+        printf("result = %d\n", i++);
+    }
+
     return 0;
 }
