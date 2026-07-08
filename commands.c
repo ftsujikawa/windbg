@@ -618,7 +618,7 @@ void command_loop(debugger_t *dbg)
             printf("  del <addr|symbol|file:line>    -- delete a breakpoint\n");
             printf("  dis [addr|symbol|file:line]    -- disassemble\n");
             printf("  help / h                       -- show this help\n");
-            printf("  leak [on|off]                  -- toggle malloc/free leak tracking\n");
+            printf("  leak [on|off]                  -- toggle malloc/calloc/realloc/free leak tracking\n");
             printf("  list / l [line|file:line]      -- show source code around a line\n");
             printf("  lines [filter]                 -- show line number <-> address mapping\n");
             printf("  n                              -- step over (next source line)\n");
