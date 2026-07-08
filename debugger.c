@@ -224,7 +224,10 @@ void debugger_loop(debugger_t *dbg)
                     GetThreadContext(dbg->thread, &lctx);
                     void *hit_addr = (void*)(lctx.Rip - 1);
 
-                    if (hit_addr == dbg->malloc_addr || hit_addr == dbg->free_addr ||
+                    if (hit_addr == dbg->malloc_addr || 
+                        (dbg->calloc_addr && hit_addr == dbg->calloc_addr) ||
+                        (dbg->realloc_addr && hit_addr == dbg->realloc_addr) ||
+                        hit_addr == dbg->free_addr ||
                         (dbg->malloc_ret_addr != NULL && hit_addr == dbg->malloc_ret_addr))
                     {
                         lctx.Rip--;
@@ -232,6 +235,10 @@ void debugger_loop(debugger_t *dbg)
 
                         if (hit_addr == dbg->malloc_addr)
                             leak_on_malloc_enter(dbg);
+                        else if (dbg->calloc_addr && hit_addr == dbg->calloc_addr)
+                            leak_on_calloc_enter(dbg);
+                        else if (dbg->realloc_addr && hit_addr == dbg->realloc_addr)
+                            leak_on_realloc_enter(dbg);
                         else if (hit_addr == dbg->free_addr)
                             leak_on_free_enter(dbg);
                         else

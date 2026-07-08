@@ -21,6 +21,7 @@ typedef struct alloc_info
     void *addr;
     size_t size;
     DWORD64 caller;
+    char alloc_func[32];  /* "malloc", "calloc", "realloc", etc. */
     struct alloc_info *next;
 } alloc_info_t;
 
@@ -76,11 +77,16 @@ typedef struct
     int leak_tracking;
     void *malloc_addr;
     BYTE malloc_orig_byte;
+    void *calloc_addr;
+    BYTE calloc_orig_byte;
+    void *realloc_addr;
+    BYTE realloc_orig_byte;
     void *free_addr;
     BYTE free_orig_byte;
     void *malloc_ret_addr;      /* one-shot temp bp: return address of the in-flight malloc call */
     BYTE malloc_ret_byte;
     size_t pending_alloc_size;
+    char current_alloc_func[32]; /* "malloc", "calloc", "realloc" */
     void *leak_rearm_addr;      /* malloc_addr/free_addr byte was restored for one real
                                    instruction (via single-step) and must be rewritten
                                    back to 0xCC once that single-step completes */

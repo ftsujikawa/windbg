@@ -12,6 +12,8 @@ int leak_tracking_enable(debugger_t *dbg)
     }
 
     void *malloc_addr = lookup_symbol(dbg, "malloc");
+    void *calloc_addr = lookup_symbol(dbg, "calloc");
+    void *realloc_addr = lookup_symbol(dbg, "realloc");
     void *free_addr = lookup_symbol(dbg, "free");
 
     if (!malloc_addr || !free_addr)
@@ -28,15 +30,34 @@ int leak_tracking_enable(debugger_t *dbg)
     WriteProcessMemory(dbg->process, malloc_addr, &int3, 1, &n);
     FlushInstructionCache(dbg->process, malloc_addr, 1);
 
+    if (calloc_addr)
+    {
+        ReadProcessMemory(dbg->process, calloc_addr, &dbg->calloc_orig_byte, 1, &n);
+        WriteProcessMemory(dbg->process, calloc_addr, &int3, 1, &n);
+        FlushInstructionCache(dbg->process, calloc_addr, 1);
+    }
+
+    if (realloc_addr)
+    {
+        ReadProcessMemory(dbg->process, realloc_addr, &dbg->realloc_orig_byte, 1, &n);
+        WriteProcessMemory(dbg->process, realloc_addr, &int3, 1, &n);
+        FlushInstructionCache(dbg->process, realloc_addr, 1);
+    }
+
     ReadProcessMemory(dbg->process, free_addr, &dbg->free_orig_byte, 1, &n);
     WriteProcessMemory(dbg->process, free_addr, &int3, 1, &n);
     FlushInstructionCache(dbg->process, free_addr, 1);
 
     dbg->malloc_addr = malloc_addr;
+    dbg->calloc_addr = calloc_addr;
+    dbg->realloc_addr = realloc_addr;
     dbg->free_addr = free_addr;
     dbg->leak_tracking = 1;
 
-    printf("leak tracking enabled (malloc=%p free=%p)\n", malloc_addr, free_addr);
+    printf("leak tracking enabled (malloc=%p", malloc_addr);
+    if (calloc_addr) printf(" calloc=%p", calloc_addr);
+    if (realloc_addr) printf(" realloc=%p", realloc_addr);
+    printf(" free=%p)\n", free_addr);
 
     return 0;
 }
@@ -53,6 +74,18 @@ void leak_tracking_disable(debugger_t *dbg)
 
     WriteProcessMemory(dbg->process, dbg->malloc_addr, &dbg->malloc_orig_byte, 1, &n);
     FlushInstructionCache(dbg->process, dbg->malloc_addr, 1);
+
+    if (dbg->calloc_addr)
+    {
+        WriteProcessMemory(dbg->process, dbg->calloc_addr, &dbg->calloc_orig_byte, 1, &n);
+        FlushInstructionCache(dbg->process, dbg->calloc_addr, 1);
+    }
+
+    if (dbg->realloc_addr)
+    {
+        WriteProcessMemory(dbg->process, dbg->realloc_addr, &dbg->realloc_orig_byte, 1, &n);
+        FlushInstructionCache(dbg->process, dbg->realloc_addr, 1);
+    }
 
     WriteProcessMemory(dbg->process, dbg->free_addr, &dbg->free_orig_byte, 1, &n);
     FlushInstructionCache(dbg->process, dbg->free_addr, 1);
@@ -77,6 +110,8 @@ void leak_tracking_disable(debugger_t *dbg)
     dbg->allocations = NULL;
 
     dbg->malloc_addr = NULL;
+    dbg->calloc_addr = NULL;
+    dbg->realloc_addr = NULL;
     dbg->free_addr = NULL;
     dbg->leak_tracking = 0;
 
@@ -103,14 +138,22 @@ static void rearm_after_one_step(debugger_t *dbg, void *addr, BYTE orig_byte)
     dbg->leak_rearm_byte = orig_byte;
 }
 
-void leak_on_malloc_enter(debugger_t *dbg)
+void leak_on_alloc_enter(debugger_t *dbg, void *addr, const char *func_name)
 {
     CONTEXT ctx = {0};
     ctx.ContextFlags = CONTEXT_FULL;
     GetThreadContext(dbg->thread, &ctx);
 
     /* x64 Microsoft ABI: size_t size arrives in RCX */
+    /* For calloc: RCX=count, RDX=size */
+    /* For realloc: RCX=ptr, RDX=size */
     dbg->pending_alloc_size = (size_t)ctx.Rcx;
+    if (strcmp(func_name, "calloc") == 0)
+    {
+        dbg->pending_alloc_size *= (size_t)ctx.Rdx;  /* count * size */
+    }
+    
+    strcpy(dbg->current_alloc_func, func_name);
 
     DWORD64 ret_addr = 0;
     SIZE_T n;
@@ -135,7 +178,34 @@ void leak_on_malloc_enter(debugger_t *dbg)
     dbg->malloc_ret_addr = (void*)ret_addr;
     dbg->malloc_ret_byte = orig;
 
-    rearm_after_one_step(dbg, dbg->malloc_addr, dbg->malloc_orig_byte);
+    BYTE orig_byte;
+    if (strcmp(func_name, "malloc") == 0)
+        orig_byte = dbg->malloc_orig_byte;
+    else if (strcmp(func_name, "calloc") == 0)
+        orig_byte = dbg->calloc_orig_byte;
+    else if (strcmp(func_name, "realloc") == 0)
+        orig_byte = dbg->realloc_orig_byte;
+    else
+        orig_byte = dbg->malloc_orig_byte;  /* fallback */
+
+    rearm_after_one_step(dbg, addr, orig_byte);
+}
+
+void leak_on_malloc_enter(debugger_t *dbg)
+{
+    leak_on_alloc_enter(dbg, dbg->malloc_addr, "malloc");
+}
+
+void leak_on_calloc_enter(debugger_t *dbg)
+{
+    if (dbg->calloc_addr)
+        leak_on_alloc_enter(dbg, dbg->calloc_addr, "calloc");
+}
+
+void leak_on_realloc_enter(debugger_t *dbg)
+{
+    if (dbg->realloc_addr)
+        leak_on_alloc_enter(dbg, dbg->realloc_addr, "realloc");
 }
 
 void leak_on_malloc_return(debugger_t *dbg)
@@ -162,6 +232,7 @@ void leak_on_malloc_return(debugger_t *dbg)
     a->addr = ptr;
     a->size = dbg->pending_alloc_size;
     a->caller = ctx.Rip;
+    strcpy(a->alloc_func, dbg->current_alloc_func);
     a->next = dbg->allocations;
     dbg->allocations = a;
 }
@@ -254,8 +325,8 @@ void print_leaks(debugger_t *dbg)
                 " at %s:%lu", line.FileName, line.LineNumber);
         }
 
-        printf("#%d  %p  %zu bytes  allocated by %s%s\n",
-            i, a->addr, a->size, symbol_name, line_info);
+        printf("#%d  %p  %zu bytes  allocated by %s() %s%s\n",
+            i, a->addr, a->size, a->alloc_func, symbol_name, line_info);
 
         count++;
         total += a->size;
