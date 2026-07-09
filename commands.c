@@ -397,7 +397,7 @@ void command_loop(debugger_t *dbg)
                     else
                     {
                         /* Try register first, fall back to variable */
-                        if (!set_register(dbg, lhs, rv.value))
+                        if (!set_register(dbg, lhs, rv.value, rv.fvalue, rv.is_float))
                             expr_assign(dbg, lhs, &rv);
                     }
                 }
