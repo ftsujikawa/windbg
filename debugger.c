@@ -409,8 +409,8 @@ void debugger_loop(debugger_t *dbg)
                     }
 
                     printf("step -> RIP=0x%llx\n", ctx.Rip);
-                    show_source_line(dbg, ctx.Rip);
-                    print_disassembly(dbg, ctx.Rip, 1);
+                    if (!show_source_line(dbg, ctx.Rip))
+                        print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;
                 }
 
