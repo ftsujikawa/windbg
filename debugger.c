@@ -8,6 +8,12 @@
 #include "symbols.h"
 #include "leakcheck.h"
 
+/* Print PID and TID at a stop point before source/disassembly output. */
+static void show_pid_tid(debugger_t *dbg)
+{
+    printf("process id=%lu thread id=%lu\n", dbg->pid, dbg->tid);
+}
+
 /* Console control handler: swallow Ctrl+C in the debugger itself.
  * The debuggee, being in the same console group, receives the same event
  * and reports it as DBG_CONTROL_C; debugger_loop treats that as a break-in. */
@@ -193,6 +199,7 @@ void debugger_loop(debugger_t *dbg)
                     printf("stopped exception=0x%lx RIP=0x%llx\n",
                            ev.u.Exception.ExceptionRecord.ExceptionCode,
                            ctx.Rip);
+                    show_pid_tid(dbg);
                     if (!show_source_line(dbg, ctx.Rip))
                         print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;
@@ -299,6 +306,7 @@ void debugger_loop(debugger_t *dbg)
                         arm_breakpoint_rearm(dbg, hit_addr, orig_byte);
 
                         printf("hit breakpoint at %p\n", hit_addr);
+                        show_pid_tid(dbg);
                         if (!show_source_line(dbg, ctx.Rip))
                             print_disassembly(dbg, ctx.Rip, 1);
                         source_shown = 1;
@@ -309,6 +317,7 @@ void debugger_loop(debugger_t *dbg)
                          * such as the ntdll initial break are handled by the
                          * OS when we continue with DBG_CONTINUE. */
                         printf("breakpoint at %p (not tracked)\n", hit_addr);
+                        show_pid_tid(dbg);
                         if (!show_source_line(dbg, ctx.Rip))
                             print_disassembly(dbg, ctx.Rip, 1);
                         source_shown = 1;
@@ -409,6 +418,7 @@ void debugger_loop(debugger_t *dbg)
                     }
 
                     printf("step -> RIP=0x%llx\n", ctx.Rip);
+                    show_pid_tid(dbg);
                     if (!show_source_line(dbg, ctx.Rip))
                         print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;

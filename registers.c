@@ -16,7 +16,19 @@ void show_registers(debugger_t *dbg)
     printf("RBX=%llx\n", ctx.Rbx);
     printf("RCX=%llx\n", ctx.Rcx);
     printf("RDX=%llx\n", ctx.Rdx);
+    printf("RSI=%llx\n", ctx.Rsi);
+    printf("RDI=%llx\n", ctx.Rdi);
+    printf("RBP=%llx\n", ctx.Rbp);
     printf("RSP=%llx\n", ctx.Rsp);
+    printf("R8 =%llx\n", ctx.R8);
+    printf("R9 =%llx\n", ctx.R9);
+    printf("R10=%llx\n", ctx.R10);
+    printf("R11=%llx\n", ctx.R11);
+    printf("R12=%llx\n", ctx.R12);
+    printf("R13=%llx\n", ctx.R13);
+    printf("R14=%llx\n", ctx.R14);
+    printf("R15=%llx\n", ctx.R15);
+    printf("RFL=%llx\n", (unsigned long long)ctx.EFlags);
 
 #else
 
