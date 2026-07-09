@@ -396,7 +396,7 @@ static int try_parse_typename(lex_t *l, int *out_is_pointer)
         /* yet another "long" for "long long" */
         if (l->cur.kind == TOK_IDENT && strcmp(l->cur.text,"long")==0)
         {
-            strncat(full, " ", sizeof(full)-strlen(full)-1);
+                strncat_s(full, sizeof(full), " ", 1);
         strncat_s(full, sizeof(full), l->cur.text, _TRUNCATE);
             lex_advance(l);
         }

@@ -1,0 +1,16 @@
+﻿  breakpoints.c
+  commands.c
+  debugger.c
+  disasm.c
+  leakcheck.c
+  main.c
+  memory.c
+  registers.c
+  symbols.c
+  expr.c
+C:\Users\f-tsu\source\repos\windbg\windbg\expr.c(1,1): warning C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
+  コード生成しています。
+  Previous IPDB not found, fall back to full compilation.
+  All 113 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  コード生成が終了しました。
+  windbg.vcxproj -> C:\Users\f-tsu\source\repos\windbg\x64\Release\tdb.exe

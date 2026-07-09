@@ -1,0 +1,10 @@
+C:\Users\f-tsu\source\repos\windbg\windbg\breakpoints.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\breakpoints.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\commands.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\commands.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\debugger.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\debugger.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\disasm.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\disasm.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\leakcheck.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\leakcheck.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\main.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\main.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\memory.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\memory.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\registers.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\registers.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\symbols.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\symbols.obj
+C:\Users\f-tsu\source\repos\windbg\windbg\expr.c;C:\Users\f-tsu\source\repos\windbg\windbg\obj\tdb\x64\Debug\expr.obj

@@ -1,0 +1,13 @@
+﻿C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (x64\Debug\) に別のプロジェクト (windbg.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。
+  breakpoints.c
+  commands.c
+  debugger.c
+  disasm.c
+  leakcheck.c
+  main.c
+  memory.c
+  registers.c
+  symbols.c
+  expr.c
+  コードを生成中...
+  tdb.vcxproj -> C:\Users\f-tsu\source\repos\windbg\x64\Debug\tdb.exe

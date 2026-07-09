@@ -375,11 +375,11 @@ void command_loop(debugger_t *dbg)
                 while (vend > p && *vend == ' ') vend--;
                 size_t vlen = (size_t)(vend - p + 1);
                 if (vlen >= sizeof(lhs)) vlen = sizeof(lhs) - 1;
-                strncpy(lhs, p, vlen);
+                strncpy_s(lhs, sizeof(lhs), p, vlen);
 
                 const char *vstart = eq + 1;
                 while (*vstart == ' ') vstart++;
-                strncpy(rhs, vstart, sizeof(rhs) - 1);
+                strncpy_s(rhs, sizeof(rhs), vstart, sizeof(rhs) - 1);
                 char *nl = strchr(rhs, '\n'); if (nl) *nl = '\0';
                 char *cr = strchr(rhs, '\r'); if (cr) *cr = '\0';
 
@@ -435,7 +435,7 @@ void command_loop(debugger_t *dbg)
 
             {
                 char expr_buf[512] = {0};
-                strncpy(expr_buf, arg, sizeof(expr_buf) - 1);
+                strncpy_s(expr_buf, sizeof(expr_buf), arg, sizeof(expr_buf) - 1);
                 char *nl = strchr(expr_buf, '\n'); if (nl) *nl = '\0';
                 char *cr = strchr(expr_buf, '\r'); if (cr) *cr = '\0';
                 if (expr_buf[0])
@@ -550,7 +550,7 @@ void command_loop(debugger_t *dbg)
             /* optional filename filter after "lines " */
             if (line[5] == ' ')
             {
-                strncpy(filter, line + 6, sizeof(filter) - 1);
+                strncpy_s(filter, sizeof(filter), line + 6, sizeof(filter) - 1);
                 char *nl = strchr(filter, '\n'); if (nl) *nl = '\0';
                 char *cr = strchr(filter, '\r'); if (cr) *cr = '\0';
             }
@@ -580,7 +580,7 @@ void command_loop(debugger_t *dbg)
             char what[128] = {0};
             if (line[4] == ' ')
             {
-                strncpy(what, line + 5, sizeof(what) - 1);
+                strncpy_s(what, sizeof(what), line + 5, sizeof(what) - 1);
                 char *nl = strchr(what, '\n'); if (nl) *nl = '\0';
                 char *cr = strchr(what, '\r'); if (cr) *cr = '\0';
             }
@@ -647,7 +647,7 @@ void command_loop(debugger_t *dbg)
         {
             /* strip trailing newline for display */
             char cmd[64] = {0};
-            strncpy(cmd, line, sizeof(cmd) - 1);
+            strncpy_s(cmd, sizeof(cmd), line, sizeof(cmd) - 1);
             char *nl = strchr(cmd, '\n'); if (nl) *nl = '\0';
             char *cr = strchr(cmd, '\r'); if (cr) *cr = '\0';
             if (cmd[0] != '\0')

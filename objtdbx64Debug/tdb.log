@@ -1,0 +1,13 @@
+﻿C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(536,5): warning MSB8004: Intermediate ディレクトリの末尾がスラッシュではありません。Intermediate ディレクトリが適切に評価されるようにするために、このビルド インスタンスによってスラッシュが追加されます。
+  breakpoints.c
+  commands.c
+  debugger.c
+  disasm.c
+  leakcheck.c
+  main.c
+  memory.c
+  registers.c
+  symbols.c
+  expr.c
+  コードを生成中...
+  tdb.vcxproj -> C:\Users\f-tsu\source\repos\windbg\x64\Debug\tdb.exe

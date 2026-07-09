@@ -121,7 +121,7 @@ void show_source_lines(debugger_t *dbg, const char *filename, DWORD from, DWORD 
     fclose(f);
 
     dbg->list_next_line = end + 1;
-    strncpy(dbg->list_file, filename, sizeof(dbg->list_file) - 1);
+    strncpy_s(dbg->list_file, sizeof(dbg->list_file), filename, sizeof(dbg->list_file) - 1);
 }
 
 DWORD get_source_line_number(debugger_t *dbg, DWORD64 addr)
@@ -448,15 +448,15 @@ void print_variable(debugger_t *dbg, const char *name)
         size_t base_len = (size_t)(sep - varname);
         if (base_len >= sizeof(base_name))
             base_len = sizeof(base_name) - 1;
-        strncpy(base_name, varname, base_len);
+        strncpy_s(base_name, sizeof(base_name), varname, base_len);
         base_name[base_len] = '\0';
 
         if (sep[0] == '-' && sep[1] == '>')
-            strncpy(member_path, sep + 2, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep + 2, sizeof(member_path) - 1);
         else if (sep[0] == '[')
-            strncpy(member_path, sep, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep, sizeof(member_path) - 1);
         else
-            strncpy(member_path, sep + 1, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep + 1, sizeof(member_path) - 1);
 
         varname = base_name;
     }
@@ -572,7 +572,7 @@ void print_variable(debugger_t *dbg, const char *name)
 
             size_t tlen = next ? (size_t)(next - path) : strlen(path);
             if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
-            strncpy(token, path, tlen);
+            strncpy_s(token, sizeof(token), path, tlen);
             token[tlen] = '\0';
 
             if (is_ptr)
@@ -938,15 +938,15 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
         size_t base_len = (size_t)(sep - varname);
         if (base_len >= sizeof(base_name))
             base_len = sizeof(base_name) - 1;
-        strncpy(base_name, varname, base_len);
+        strncpy_s(base_name, sizeof(base_name), varname, base_len);
         base_name[base_len] = '\0';
 
         if (sep[0] == '-' && sep[1] == '>')
-            strncpy(member_path, sep + 2, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep + 2, sizeof(member_path) - 1);
         else if (sep[0] == '[')
-            strncpy(member_path, sep, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep, sizeof(member_path) - 1);
         else
-            strncpy(member_path, sep + 1, sizeof(member_path) - 1);
+            strncpy_s(member_path, sizeof(member_path), sep + 1, sizeof(member_path) - 1);
 
         varname = base_name;
     }
@@ -1064,7 +1064,7 @@ int set_variable(debugger_t *dbg, const char *name, long long value)
 
             size_t tlen = next ? (size_t)(next - path) : strlen(path);
             if (tlen >= sizeof(token)) tlen = sizeof(token) - 1;
-            strncpy(token, path, tlen);
+            strncpy_s(token, sizeof(token), path, tlen);
             token[tlen] = '\0';
 
             DWORD type_tag = 0;
@@ -1295,7 +1295,7 @@ void print_symbol_info(debugger_t *dbg, const char *name)
     SymSetContext(dbg->sym_handle, &frm, NULL);
 
     syms_enum_ctx_t ec = {0};
-    strncpy(ec.target, name, sizeof(ec.target) - 1);
+    strncpy_s(ec.target, sizeof(ec.target), name, sizeof(ec.target) - 1);
     SymEnumSymbols(dbg->sym_handle, 0, "*", syms_enum_cb, &ec);
 
     PSYMBOL_INFO sym;
@@ -1396,7 +1396,7 @@ static BOOL CALLBACK lines_enum_cb(PSRCCODEINFO linfo, PVOID ctx)
     /* Print filename header when file changes */
     if (strcmp(linfo->FileName, c->cur_file_buf) != 0)
     {
-        strncpy(c->cur_file_buf, linfo->FileName, sizeof(c->cur_file_buf) - 1);
+        strncpy_s(c->cur_file_buf, sizeof(c->cur_file_buf), linfo->FileName, sizeof(c->cur_file_buf) - 1);
         printf("\n%s:\n", c->cur_file_buf);
     }
 

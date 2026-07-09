@@ -67,7 +67,7 @@ int debugger_start(debugger_t *dbg, const char *program)
        SymFunctionTableAccess64 needs the real one. */
     dbg->sym_handle = dbg->process;
 
-    strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);
+    strncpy_s(dbg->target_program, sizeof(dbg->target_program), program, sizeof(dbg->target_program) - 1);
 
     printf("started pid=%lu\n", dbg->pid);
 
@@ -77,7 +77,7 @@ int debugger_start(debugger_t *dbg, const char *program)
 void debugger_restart(debugger_t *dbg)
 {
     char program[512];
-    strncpy(program, dbg->target_program, sizeof(program) - 1);
+    strncpy_s(program, sizeof(program), dbg->target_program, sizeof(program) - 1);
 
     breakpoint_t *bp = dbg->breakpoints;
     while (bp != NULL)
@@ -100,7 +100,7 @@ void debugger_restart(debugger_t *dbg)
 
     memset(dbg, 0, sizeof(debugger_t));
 
-    strncpy(dbg->target_program, program, sizeof(dbg->target_program) - 1);
+    strncpy_s(dbg->target_program, sizeof(dbg->target_program), program, sizeof(dbg->target_program) - 1);
 
     if (debugger_start(dbg, program) < 0)
     {

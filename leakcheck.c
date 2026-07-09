@@ -153,7 +153,7 @@ void leak_on_alloc_enter(debugger_t *dbg, void *addr, const char *func_name)
         dbg->pending_alloc_size *= (size_t)ctx.Rdx;  /* count * size */
     }
     
-    strcpy(dbg->current_alloc_func, func_name);
+    strcpy_s(dbg->current_alloc_func, sizeof(dbg->current_alloc_func), func_name);
 
     DWORD64 ret_addr = 0;
     SIZE_T n;
@@ -232,7 +232,7 @@ void leak_on_malloc_return(debugger_t *dbg)
     a->addr = ptr;
     a->size = dbg->pending_alloc_size;
     a->caller = ctx.Rip;
-    strcpy(a->alloc_func, dbg->current_alloc_func);
+    strcpy_s(a->alloc_func, sizeof(a->alloc_func), dbg->current_alloc_func);
     a->next = dbg->allocations;
     dbg->allocations = a;
 }
