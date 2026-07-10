@@ -607,6 +607,20 @@ void command_loop(debugger_t *dbg)
             }
         }
 
+        else if (strncmp(line, "kill", 4) == 0)
+        {
+            if (dbg->process)
+            {
+                TerminateProcess(dbg->process, 1);
+                printf("killed process\n");
+            }
+            else
+            {
+                printf("no process to kill\n");
+            }
+            return;
+        }
+
         else if (strncmp(line, "help", 4) == 0
                  || strcmp(line, "h\n") == 0
                  || strcmp(line, "h\r\n") == 0)
@@ -618,6 +632,7 @@ void command_loop(debugger_t *dbg)
             printf("  del <addr|symbol|file:line>    -- delete a breakpoint\n");
             printf("  dis [addr|symbol|file:line]    -- disassemble\n");
             printf("  help / h                       -- show this help\n");
+            printf("  kill                           -- forcibly terminate the debuggee process\n");
             printf("  leak [on|off]                  -- toggle malloc/calloc/realloc/free leak tracking\n");
             printf("  list / l [line|file:line]      -- show source code around a line\n");
             printf("  lines [filter]                 -- show line number <-> address mapping\n");
