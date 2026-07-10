@@ -138,17 +138,6 @@ void debugger_loop(debugger_t *dbg)
         {
             case CREATE_PROCESS_DEBUG_EVENT:
 
-                printf(
-                    "CREATE_PROCESS\n"
-                );
-
-                printf(
-                    "base=%p\n",
-                    ev.u
-                      .CreateProcessInfo
-                      .lpBaseOfImage
-                );
-
                 init_symbols(dbg);
 
                 DWORD64 base =
@@ -164,8 +153,6 @@ void debugger_loop(debugger_t *dbg)
                         0
                     );
 
-                printf("module loaded = %llx\n", base);
-
                 if (!base)
                 {
                     printf("SymLoadModuleEx err=%lu\n",
@@ -179,13 +166,6 @@ void debugger_loop(debugger_t *dbg)
 #endif
 
             case EXCEPTION_DEBUG_EVENT:
-
-                printf(
-                    "exception=0x%lx\n",
-                    ev.u.Exception
-                        .ExceptionRecord
-                        .ExceptionCode
-                    );
 
                 int source_shown = 0;
 
@@ -397,9 +377,6 @@ void debugger_loop(debugger_t *dbg)
                     {
                         DWORD cur_line = get_source_line_number(
                             dbg, ctx.Rip);
-
-                        printf("[debug step] cur_line=%lu step_line=%lu\n",
-                            cur_line, dbg->step_line);
 
                         if (cur_line == 0)
                         {

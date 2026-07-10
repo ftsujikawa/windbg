@@ -12,8 +12,6 @@
 
 int init_symbols(debugger_t *dbg)
 {
-    printf("process handle = %p\n", dbg->process);
-
     BOOL ok = SymInitialize(
         dbg->sym_handle,
         NULL,
@@ -209,11 +207,8 @@ static void print_struct(
         return;
 
     DWORD child_count = 0;
-    BOOL cc_ok = SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
+    SymGetTypeInfo(dbg->sym_handle, mod_base, type_id,
         TI_GET_CHILDRENCOUNT, &child_count);
-
-    fprintf(stderr, "[debug] print_struct mod_base=0x%llx type_id=%u cc_ok=%d child_count=%u\n",
-        mod_base, type_id, cc_ok, child_count);
 
     if (child_count == 0)
         return;
