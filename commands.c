@@ -9,6 +9,7 @@
 #include "symbols.h"
 #include "expr.h"
 #include "leakcheck.h"
+#include "watchpoints.h"
 
 void command_loop(debugger_t *dbg)
 {
@@ -589,8 +590,102 @@ void command_loop(debugger_t *dbg)
                 print_breakpoints(dbg);
             else if (strcmp(what, "leaks") == 0)
                 print_leaks(dbg);
+            else if (strcmp(what, "wp") == 0)
+                print_watchpoints(dbg);
             else
                 show_variables(dbg, what);
+        }
+
+        else if (strncmp(line, "watch", 5) == 0)
+        {
+            /* Syntax: watch [/r] [/N] <addr|symbol|expr>
+             *   /r  = read/write (default: write-only)
+             *   /1 /2 /4 /8 = size in bytes (default: 4) */
+            char rest[256] = {0};
+            strncpy_s(rest, sizeof(rest), line + 5, sizeof(rest) - 1);
+            char *nl = strchr(rest, '\n'); if (nl) *nl = '\0';
+            char *cr = strchr(rest, '\r'); if (cr) *cr = '\0';
+
+            int  wtype = WATCH_WRITE;
+            int  wsize = 4;
+            char *p = rest;
+
+            /* Skip leading spaces and parse flags */
+            while (*p == ' ') p++;
+            while (*p == '/')
+            {
+                p++;
+                if (*p == 'r' || *p == 'R') { wtype = WATCH_RW; p++; }
+                else if (*p == '1') { wsize = 1; p++; }
+                else if (*p == '2') { wsize = 2; p++; }
+                else if (*p == '4') { wsize = 4; p++; }
+                else if (*p == '8') { wsize = 8; p++; }
+                else { printf("unknown watch flag: /%c\n", *p); p++; }
+                while (*p == ' ') p++;
+            }
+            while (*p == ' ') p++;
+
+            if (*p == '\0')
+            {
+                printf("usage: watch [/r] [/1|/2|/4|/8] <addr|symbol|expr>\n");
+            }
+            else
+            {
+                void *waddr = NULL;
+
+                if (strncmp(p, "0x", 2) == 0 || strncmp(p, "0X", 2) == 0)
+                {
+                    unsigned long long x = 0;
+                    sscanf_s(p, "%llx", &x);
+                    waddr = (void*)x;
+                }
+                else
+                {
+                    waddr = lookup_symbol(dbg, p);
+                    if (!waddr)
+                    {
+                        /* Try expression evaluation as address */
+                        expr_val_t v = {0};
+                        if (expr_eval(dbg, p, &v) == EVAL_OK &&
+                            !v.is_float && v.value != 0)
+                            waddr = (void*)(uintptr_t)v.value;
+                    }
+                }
+
+                if (!waddr)
+                    printf("watch: cannot resolve address for '%s'\n", p);
+                else
+                    set_watchpoint(dbg, waddr, wtype, wsize);
+            }
+        }
+
+        else if (strncmp(line, "wdel", 4) == 0)
+        {
+            char arg[128] = {0};
+            if (sscanf_s(line, "%*s %127s", arg, (unsigned)sizeof(arg)) != 1)
+            {
+                printf("usage: wdel <addr|symbol>\n");
+            }
+            else
+            {
+                void *waddr = NULL;
+
+                if (strncmp(arg, "0x", 2) == 0 || strncmp(arg, "0X", 2) == 0)
+                {
+                    unsigned long long x = 0;
+                    sscanf_s(arg, "%llx", &x);
+                    waddr = (void*)x;
+                }
+                else
+                {
+                    waddr = lookup_symbol(dbg, arg);
+                }
+
+                if (!waddr)
+                    printf("wdel: cannot resolve address for '%s'\n", arg);
+                else
+                    remove_watchpoint(dbg, waddr);
+            }
         }
 
         else if (strncmp(line, "run", 3) == 0)
@@ -645,8 +740,10 @@ void command_loop(debugger_t *dbg)
             printf("  s / step                       -- step into (one source line)\n");
             printf("  set print pretty [on|off]      -- toggle pretty printing\n");
             printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
-            printf("  show [locals|args|globals|bp|leaks] -- show variables / breakpoints / leaks\n");
+            printf("  show [locals|args|globals|bp|leaks|wp] -- show variables / breakpoints / leaks / watchpoints\n");
             printf("  si                             -- single step (one instruction)\n");
+            printf("  watch [/r] [/1|/2|/4|/8] <addr|symbol> -- set hardware watchpoint (default: write, 4 bytes)\n");
+            printf("  wdel <addr|symbol>             -- remove a hardware watchpoint\n");
             printf("  syms <name>                    -- show symbol details (address/size/type)\n");
             printf("  tb                             -- print backtrace\n");
             printf("  up                             -- run until the current function returns\n");

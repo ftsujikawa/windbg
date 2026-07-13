@@ -156,6 +156,7 @@
     <ClCompile Include="registers.c" />
     <ClCompile Include="symbols.c" />
     <ClCompile Include="expr.c" />
+    <ClCompile Include="watchpoints.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h" />
@@ -167,6 +168,7 @@
     <ClInclude Include="registers.h" />
     <ClInclude Include="symbols.h" />
     <ClInclude Include="expr.h" />
+    <ClInclude Include="watchpoints.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

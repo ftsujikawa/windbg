@@ -16,6 +16,19 @@ typedef struct breakpoint
     struct breakpoint *next;
 } breakpoint_t;
 
+/* Watch type: 1=write, 2=read/write */
+#define WATCH_WRITE  1
+#define WATCH_RW     2
+
+/* Hardware watchpoint (uses DR0-DR3 / DR7) */
+typedef struct watchpoint
+{
+    void    *addr;
+    int      type;   /* WATCH_WRITE or WATCH_RW */
+    int      size;   /* 1, 2, 4, or 8 bytes */
+    int      slot;   /* DR index 0-3 */
+} watchpoint_t;
+
 typedef struct alloc_info
 {
     void *addr;
@@ -92,6 +105,10 @@ typedef struct
                                    back to 0xCC once that single-step completes */
     BYTE leak_rearm_byte;
     alloc_info_t *allocations;
+
+    /* hardware watchpoints (up to 4: DR0-DR3) */
+    watchpoint_t watchpoints[4];
+    int          watch_count;
 
 } debugger_t;
 int debugger_start(debugger_t *dbg, const char *program);

@@ -7,6 +7,7 @@
 #include "registers.h"
 #include "symbols.h"
 #include "leakcheck.h"
+#include "watchpoints.h"
 
 /* Print PID and TID at a stop point before source/disassembly output. */
 static void show_pid_tid(debugger_t *dbg)
@@ -306,6 +307,28 @@ void debugger_loop(debugger_t *dbg)
 
                 if (ev.u.Exception.ExceptionRecord.ExceptionCode == 0x80000004)
                 {
+                    /* Check for hardware watchpoint hit (DR6 bits 0-3) before
+                     * anything else so that a concurrent step/rearm still sees it. */
+                    if (dbg->watch_count > 0)
+                    {
+                        int ws = watchpoint_hit_slot(dbg);
+                        if (ws >= 0)
+                        {
+                            CONTEXT ctx = {0};
+                            ctx.ContextFlags = CONTEXT_FULL;
+                            GetThreadContext(dbg->thread, &ctx);
+                            watchpoint_report(dbg, ws, ctx.Rip);
+                            show_pid_tid(dbg);
+                            if (!show_source_line(dbg, ctx.Rip))
+                                print_disassembly(dbg, ctx.Rip, 1);
+                            source_shown = 1;
+                            dbg->list_next_line = 0;
+                            dbg->list_file[0] = '\0';
+                            command_loop(dbg);
+                            break;
+                        }
+                    }
+
                     int si_requested = dbg->si_requested;
                     dbg->si_requested = 0;
 
