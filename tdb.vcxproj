@@ -157,6 +157,10 @@
     <ClCompile Include="symbols.c" />
     <ClCompile Include="expr.c" />
     <ClCompile Include="watchpoints.c" />
+    <ClCompile Include="expr_parser.tab.c" />
+    <ClCompile Include="expr_lexer.yy.c" />
+    <ClCompile Include="cmdline_parser.tab.c" />
+    <ClCompile Include="cmdline_lexer.yy.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h" />
@@ -169,6 +173,34 @@
     <ClInclude Include="symbols.h" />
     <ClInclude Include="expr.h" />
     <ClInclude Include="watchpoints.h" />
+    <ClInclude Include="expr_internal.h" />
+    <ClInclude Include="cmdline_internal.h" />
+    <ClInclude Include="expr_parser.tab.h" />
+    <ClInclude Include="expr_lexer.h" />
+    <ClInclude Include="cmdline_parser.tab.h" />
+    <ClInclude Include="cmdline_lexer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="expr_parser.y">
+      <Command>win_bison -d -o expr_parser.tab.c expr_parser.y</Command>
+      <Outputs>expr_parser.tab.c;expr_parser.tab.h</Outputs>
+      <Message>Generating expr_parser.tab.c/.h with bison</Message>
+    </CustomBuild>
+    <CustomBuild Include="expr_lexer.l">
+      <Command>win_flex -o expr_lexer.yy.c expr_lexer.l</Command>
+      <Outputs>expr_lexer.yy.c;expr_lexer.h</Outputs>
+      <Message>Generating expr_lexer.yy.c/.h with flex</Message>
+    </CustomBuild>
+    <CustomBuild Include="cmdline_parser.y">
+      <Command>win_bison -d -o cmdline_parser.tab.c cmdline_parser.y</Command>
+      <Outputs>cmdline_parser.tab.c;cmdline_parser.tab.h</Outputs>
+      <Message>Generating cmdline_parser.tab.c/.h with bison</Message>
+    </CustomBuild>
+    <CustomBuild Include="cmdline_lexer.l">
+      <Command>win_flex -o cmdline_lexer.yy.c cmdline_lexer.l</Command>
+      <Outputs>cmdline_lexer.yy.c;cmdline_lexer.h</Outputs>
+      <Message>Generating cmdline_lexer.yy.c/.h with flex</Message>
+    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

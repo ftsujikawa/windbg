@@ -13,6 +13,13 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Grammar">
+      <UniqueIdentifier>{7B1C1C7E-9E9A-4A2E-9C1B-7B7E4E9F9A11}</UniqueIdentifier>
+      <Extensions>y;l</Extensions>
+    </Filter>
+    <Filter Include="Generated Files">
+      <UniqueIdentifier>{2A7B7D2C-3B9A-4A6E-8E2E-4C2C9E7B5A22}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="breakpoints.c">
@@ -45,6 +52,18 @@
     <ClCompile Include="leakcheck.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="expr_parser.tab.c">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
+    <ClCompile Include="expr_lexer.yy.c">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cmdline_parser.tab.c">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cmdline_lexer.yy.c">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="breakpoints.h">
@@ -74,5 +93,37 @@
     <ClInclude Include="leakcheck.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="expr_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cmdline_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="expr_parser.tab.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="expr_lexer.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cmdline_parser.tab.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cmdline_lexer.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="expr_parser.y">
+      <Filter>Grammar</Filter>
+    </CustomBuild>
+    <CustomBuild Include="expr_lexer.l">
+      <Filter>Grammar</Filter>
+    </CustomBuild>
+    <CustomBuild Include="cmdline_parser.y">
+      <Filter>Grammar</Filter>
+    </CustomBuild>
+    <CustomBuild Include="cmdline_lexer.l">
+      <Filter>Grammar</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>
