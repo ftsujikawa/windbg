@@ -12,6 +12,20 @@ breakpoint_t *find_breakpoint(debugger_t *dbg, void *addr)
     return NULL;
 }
 
+breakpoint_t *find_breakpoint_by_index(debugger_t *dbg, int index)
+{
+    if (index < 1)
+        return NULL;
+
+    int i = 1;
+    for (breakpoint_t *bp = dbg->breakpoints; bp != NULL; bp = bp->next, i++)
+    {
+        if (i == index)
+            return bp;
+    }
+    return NULL;
+}
+
 int set_breakpoint(debugger_t *dbg, void *addr)
 {
     SIZE_T n;
@@ -103,6 +117,14 @@ int remove_breakpoint_at(debugger_t *dbg, void *addr)
 
     free(bp);
     return 0;
+}
+
+void restore_breakpoint_byte(debugger_t *dbg, void *addr, BYTE orig_byte)
+{
+    SIZE_T n;
+
+    WriteProcessMemory(dbg->process, addr, &orig_byte, 1, &n);
+    FlushInstructionCache(dbg->process, addr, 1);
 }
 
 int set_temp_breakpoint(debugger_t *dbg, void *addr)

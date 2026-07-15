@@ -279,7 +279,7 @@ void debugger_loop(debugger_t *dbg)
                     if (bp != NULL)
                     {
                         BYTE orig_byte = bp->original_byte;
-                        remove_breakpoint_at(dbg, hit_addr);
+                        restore_breakpoint_byte(dbg, hit_addr, orig_byte);
 
                         ctx.Rip--;
                         SetThreadContext(dbg->thread, &ctx);

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "commands.h"
 #include "cmdline_internal.h"
@@ -68,8 +69,40 @@ void do_break(debugger_t *dbg, const char *arg)
         set_breakpoint(dbg, addr);
 }
 
+/* True if s (after an optional leading '#') is a non-empty run of digits,
+ * i.e. the "#N" index shown by `show bp` -- with or without the '#'. */
+static int is_breakpoint_index(const char *s, int *out_index)
+{
+    if (*s == '#') s++;
+    if (*s == '\0')
+        return 0;
+
+    for (const char *p = s; *p; p++)
+        if (!isdigit((unsigned char)*p))
+            return 0;
+
+    *out_index = atoi(s);
+    return 1;
+}
+
 void do_del(debugger_t *dbg, const char *arg)
 {
+    int index;
+    if (is_breakpoint_index(arg, &index))
+    {
+        breakpoint_t *bp = find_breakpoint_by_index(dbg, index);
+        if (bp == NULL)
+        {
+            printf("no breakpoint with index #%d\n", index);
+            return;
+        }
+
+        void *addr = bp->addr;
+        remove_breakpoint_at(dbg, addr);
+        printf("breakpoint removed at %p\n", addr);
+        return;
+    }
+
     void *addr = resolve_addr_spec(dbg, arg, 1);
     if (addr)
     {
@@ -240,9 +273,12 @@ static const help_entry_t help_table[] = {
       "  <file:line>  source file and line number, e.g. main.c:42\n"
       "Examples: break add        b main.c:23" },
 
-    { {"del", NULL, NULL}, "del <addr|symbol|file:line>",
+    { {"del", NULL, NULL}, "del <addr|symbol|file:line|#N>",
       "Removes the breakpoint previously set at <addr|symbol|file:line>.\n"
-      "The location is resolved the same way as for 'break'." },
+      "The location is resolved the same way as for 'break'.\n"
+      "Alternatively, <#N> or <N> removes the breakpoint by its index as\n"
+      "shown by 'show bp' (the leading '#' is optional).\n"
+      "Examples: del add       del #2       del 2" },
 
     { {"wdel", NULL, NULL}, "wdel <addr|symbol>",
       "Removes the hardware watchpoint previously set at <addr|symbol>." },
@@ -358,7 +394,7 @@ static void print_help_summary(void)
     printf("  break <addr|symbol|file:line>  -- set a breakpoint\n");
     printf("  b <addr|symbol|file:line>      -- alias for break\n");
     printf("  continue / c                   -- continue execution\n");
-    printf("  del <addr|symbol|file:line>    -- delete a breakpoint\n");
+    printf("  del <addr|symbol|file:line|#N> -- delete a breakpoint\n");
     printf("  dis [addr|symbol|file:line]    -- disassemble\n");
     printf("  help [command] / h            -- show this help, or details for one command\n");
     printf("  kill                           -- forcibly terminate the debuggee process\n");
