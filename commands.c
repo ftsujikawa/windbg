@@ -12,6 +12,7 @@
 #include "expr.h"
 #include "leakcheck.h"
 #include "watchpoints.h"
+#include "threads.h"
 
 void command_loop(debugger_t *dbg)
 {
@@ -361,13 +362,27 @@ static const help_entry_t help_table[] = {
       "                              formatting for 'print' (shows the\n"
       "                              current state if [on|off] is omitted)" },
 
-    { {"show", NULL, NULL}, "show [locals|args|globals|bp|leaks|wp]",
+    { {"show", NULL, NULL}, "show [locals|args|globals|bp|leaks|wp|threads]",
       "Displays variables or internal state depending on the argument:\n"
       "  locals | args | globals   variables in the current scope\n"
       "  bp                        active breakpoints\n"
       "  wp                        active hardware watchpoints\n"
       "  leaks                     tracked, still-allocated blocks\n"
-      "                            (see 'leak')" },
+      "                            (see 'leak')\n"
+      "  threads                   live threads in the debuggee, marking\n"
+      "                            the current one (see 'thread')" },
+
+    { {"thread", NULL, NULL}, "thread <id>|lock|unlock",
+      "Focus auto-pins to whichever thread first hits a tracked breakpoint,\n"
+      "watchpoint, or step/si/n landing; after that, the same kind of stop\n"
+      "on any OTHER thread auto-continues (prints a one-line notice)\n"
+      "instead of switching focus / entering the prompt.\n"
+      "thread <id>  switches focus and re-pins to the given thread: subse-\n"
+      "             quent 'regs', 'si', 'step', 'n', 'dis', 'tb', 'x', and\n"
+      "             'set <reg>' operate on it. Use 'show threads' for ids.\n"
+      "thread lock  re-pins focus to the current thread explicitly.\n"
+      "thread unlock  releases the pin (every thread's stops show again\n"
+      "             until one re-establishes the pin)." },
 
     { {"watch", NULL, NULL}, "watch [/r] [/1|/2|/4|/8] <addr|symbol|expr>",
       "Sets a hardware watchpoint (DR0-DR3) on <addr|symbol|expr>.\n"
@@ -410,8 +425,9 @@ static void print_help_summary(void)
     printf("  s / step                       -- step into (one source line)\n");
     printf("  set print pretty [on|off]      -- toggle pretty printing\n");
     printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
-    printf("  show [locals|args|globals|bp|leaks|wp] -- show variables / breakpoints / leaks / watchpoints\n");
+    printf("  show [locals|args|globals|bp|leaks|wp|threads] -- show variables / breakpoints / leaks / watchpoints / threads\n");
     printf("  si                             -- single step (one instruction)\n");
+    printf("  thread <id>|lock|unlock       -- switch/pin the focused thread (see 'help thread')\n");
     printf("  watch [/r] [/1|/2|/4|/8] <addr|symbol> -- set hardware watchpoint (default: write, 4 bytes)\n");
     printf("  wdel <addr|symbol>             -- remove a hardware watchpoint\n");
     printf("  syms <name>                    -- show symbol details (address/size/type)\n");
@@ -644,8 +660,56 @@ void do_show(debugger_t *dbg, const char *arg)
         print_leaks(dbg);
     else if (strcmp(arg, "wp") == 0)
         print_watchpoints(dbg);
+    else if (strcmp(arg, "threads") == 0)
+        print_threads(dbg);
     else
         show_variables(dbg, arg);
+}
+
+void do_thread(debugger_t *dbg, const char *arg)
+{
+    if (_stricmp(arg, "lock") == 0)
+    {
+        dbg->locked_tid = dbg->tid;
+        printf("focus (re-)pinned to thread id=%lu -- other threads' breakpoints/"
+               "watchpoints auto-continue instead of stopping here\n", dbg->tid);
+        return;
+    }
+
+    if (_stricmp(arg, "unlock") == 0)
+    {
+        if (dbg->locked_tid == 0)
+            printf("focus is not pinned\n");
+        else
+        {
+            printf("focus pin released (was thread id=%lu) -- the next real "
+                   "stop (any thread) re-pins automatically\n", dbg->locked_tid);
+            dbg->locked_tid = 0;
+        }
+        return;
+    }
+
+    DWORD tid = (DWORD)strtoul(arg, NULL, 0);
+
+    HANDLE h = find_thread_handle(dbg, tid);
+    if (h == NULL)
+    {
+        printf("no such thread id=%lu\n", tid);
+        return;
+    }
+
+    dbg->tid = tid;
+    dbg->thread = h;
+
+    /* an explicit switch is a deliberate choice of focus: (re-)pin it, same
+       as 'thread lock', so other threads' hits keep auto-continuing */
+    dbg->locked_tid = tid;
+
+    CONTEXT ctx = {0};
+    ctx.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(dbg->thread, &ctx);
+
+    printf("switched to thread id=%lu RIP=0x%llx\n", dbg->tid, ctx.Rip);
 }
 
 void do_watch(debugger_t *dbg, const char *arg)

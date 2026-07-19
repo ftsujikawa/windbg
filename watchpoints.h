@@ -3,6 +3,13 @@
 
 #include "debugger.h"
 
+/* (Re-)apply dbg->watchpoints' DR0-DR3/DR7 encoding to every registered
+ * thread. DR registers are per-thread CPU state, so this must run on each
+ * one for a watchpoint to fire regardless of which thread touches the
+ * watched memory; also called when a new thread is created so it inherits
+ * the current watchpoint set. */
+void apply_watchpoints(debugger_t *dbg);
+
 /* Set a hardware watchpoint on addr.
  * type : WATCH_WRITE (1) or WATCH_RW (2)
  * size : 1, 2, 4, or 8

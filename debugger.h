@@ -38,10 +38,23 @@ typedef struct alloc_info
     struct alloc_info *next;
 } alloc_info_t;
 
+/* One entry per live thread in the debuggee (see threads.c). */
+typedef struct thread_entry
+{
+    DWORD tid;
+    HANDLE handle;
+    struct thread_entry *next;
+} thread_entry_t;
+
 typedef struct
 {
     HANDLE process;
     HANDLE thread;
+
+    /* nonzero: focus is pinned to this tid -- events from any other thread
+       are auto-continued instead of switching focus / entering the command
+       loop (see 'thread lock' / 'thread unlock' in commands.c) */
+    DWORD locked_tid;
 
     HANDLE sym_handle;
     
@@ -109,6 +122,11 @@ typedef struct
     /* hardware watchpoints (up to 4: DR0-DR3) */
     watchpoint_t watchpoints[4];
     int          watch_count;
+
+    /* live threads in the debuggee (see threads.c); dbg->thread/dbg->tid
+       always point at one of these -- whichever thread is "current" for
+       inspection/stepping */
+    thread_entry_t *threads;
 
 } debugger_t;
 int debugger_start(debugger_t *dbg, const char *program);

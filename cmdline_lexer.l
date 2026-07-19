@@ -63,6 +63,7 @@ static void capture(char *dst, size_t dstsz, const char *src)
 ^"p""/"[^ \t\r\n]*   { yyless(1); BEGIN(RAWLINE); return KW_PRINT; }
 ^"p"/{BOUND}         { BEGIN(RAWLINE); return KW_PRINT; }
 ^"set"/{BOUND}       { BEGIN(RAWLINE); return KW_SET; }
+^"thread"/{BOUND}    { return KW_THREAD; }
 }
 
 <INITIAL>[^ \t\r\n]+ {

@@ -8,6 +8,7 @@
 #include "symbols.h"
 #include "leakcheck.h"
 #include "watchpoints.h"
+#include "threads.h"
 
 /* Print PID and TID at a stop point before source/disassembly output. */
 static void show_pid_tid(debugger_t *dbg)
@@ -96,6 +97,8 @@ void debugger_restart(debugger_t *dbg)
         a = next;
     }
 
+    free_all_threads(dbg);
+
     if (dbg->sym_handle)
         SymCleanup(dbg->sym_handle);
 
@@ -133,11 +136,12 @@ void debugger_loop(debugger_t *dbg)
             return;
         }
 
-        dbg->tid = ev.dwThreadId;
-
         switch (ev.dwDebugEventCode)
         {
             case CREATE_PROCESS_DEBUG_EVENT:
+
+                dbg->tid = ev.dwThreadId;
+                register_thread(dbg, dbg->tid, dbg->thread);
 
                 init_symbols(dbg);
 
@@ -159,7 +163,33 @@ void debugger_loop(debugger_t *dbg)
                     printf("SymLoadModuleEx err=%lu\n",
                         GetLastError());
                 }
-                
+
+                break;
+
+            case CREATE_THREAD_DEBUG_EVENT:
+
+                /* Doesn't touch dbg->tid/dbg->thread: this must not disturb
+                   whatever thread is currently "current" for an in-flight
+                   step/next/rearm sequence. */
+                register_thread(dbg, ev.dwThreadId, ev.u.CreateThread.hThread);
+                apply_watchpoints(dbg);
+
+                printf("thread created id=%lu\n", ev.dwThreadId);
+
+                break;
+
+            case EXIT_THREAD_DEBUG_EVENT:
+
+                printf("thread exited id=%lu exit code=%lu\n",
+                    ev.dwThreadId, ev.u.ExitThread.dwExitCode);
+
+                /* release the pin so focus can move to another live thread
+                   instead of auto-continuing everything forever */
+                if (dbg->locked_tid == ev.dwThreadId)
+                    dbg->locked_tid = 0;
+
+                unregister_thread(dbg, ev.dwThreadId);
+
                 break;
 
 #ifndef DBG_CONTROL_C
@@ -167,6 +197,18 @@ void debugger_loop(debugger_t *dbg)
 #endif
 
             case EXCEPTION_DEBUG_EVENT:
+
+                dbg->tid = ev.dwThreadId;
+                dbg->thread = find_thread_handle(dbg, dbg->tid);
+
+                /* Focus auto-pins to whichever thread first produces a real,
+                   deliberate stop (tracked breakpoint/watchpoint/step
+                   landing -- see the "dbg->locked_tid = dbg->tid" lines
+                   below); once pinned, any OTHER thread's such stop
+                   auto-continues instead of switching focus / entering the
+                   command loop. 'thread <tid>' re-pins explicitly, and
+                   'thread unlock' clears the pin (see commands.c). */
+                int auto_continue = (dbg->locked_tid != 0 && dbg->tid != dbg->locked_tid);
 
                 int source_shown = 0;
 
@@ -221,6 +263,13 @@ void debugger_loop(debugger_t *dbg)
                         lctx.Rip--;
                         SetThreadContext(dbg->thread, &lctx);
 
+                        /* the four branches below (but not the return-catch)
+                           rearm their entry breakpoint by briefly restoring
+                           its original byte; freeze other threads for that
+                           window so none of them slip past unnoticed */
+                        if (hit_addr != dbg->malloc_ret_addr)
+                            suspend_other_threads(dbg);
+
                         if (hit_addr == dbg->malloc_addr)
                             leak_on_malloc_enter(dbg);
                         else if (dbg->calloc_addr && hit_addr == dbg->calloc_addr)
@@ -262,9 +311,19 @@ void debugger_loop(debugger_t *dbg)
                         dbg->next_line = 0;
                     }
 
-                    printf("returned to 0x%llx\n", ctx.Rip);
-                    show_source_line(dbg, ctx.Rip);
-                    source_shown = 1;
+                    if (auto_continue)
+                    {
+                        printf("thread id=%lu returned to 0x%llx (not focused, continuing)\n",
+                            dbg->tid, ctx.Rip);
+                    }
+                    else
+                    {
+                        dbg->locked_tid = dbg->tid;
+                        printf("returned to 0x%llx\n", ctx.Rip);
+                        show_pid_tid(dbg);
+                        show_source_line(dbg, ctx.Rip);
+                        source_shown = 1;
+                    }
                 }
 
                 else if (ev.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT)
@@ -285,23 +344,44 @@ void debugger_loop(debugger_t *dbg)
                         SetThreadContext(dbg->thread, &ctx);
 
                         arm_breakpoint_rearm(dbg, hit_addr, orig_byte);
+                        suspend_other_threads(dbg);
 
-                        printf("hit breakpoint at %p\n", hit_addr);
-                        show_pid_tid(dbg);
-                        if (!show_source_line(dbg, ctx.Rip))
-                            print_disassembly(dbg, ctx.Rip, 1);
-                        source_shown = 1;
+                        if (auto_continue)
+                        {
+                            printf("thread id=%lu hit breakpoint at %p (not focused, continuing)\n",
+                                dbg->tid, hit_addr);
+                        }
+                        else
+                        {
+                            dbg->locked_tid = dbg->tid;
+                            printf("hit breakpoint at %p\n", hit_addr);
+                            show_pid_tid(dbg);
+                            if (!show_source_line(dbg, ctx.Rip))
+                                print_disassembly(dbg, ctx.Rip, 1);
+                            source_shown = 1;
+                        }
                     }
                     else
                     {
                         /* Do not decrement Rip here: untracked breakpoints
                          * such as the ntdll initial break are handled by the
-                         * OS when we continue with DBG_CONTINUE. */
-                        printf("breakpoint at %p (not tracked)\n", hit_addr);
-                        show_pid_tid(dbg);
-                        if (!show_source_line(dbg, ctx.Rip))
-                            print_disassembly(dbg, ctx.Rip, 1);
-                        source_shown = 1;
+                         * OS when we continue with DBG_CONTINUE. Deliberately
+                         * does not auto-pin focus here (an untracked hit,
+                         * e.g. the process-start ntdll break, isn't a
+                         * user-chosen stop worth anchoring on). */
+                        if (auto_continue)
+                        {
+                            printf("thread id=%lu breakpoint at %p (not tracked, not focused, continuing)\n",
+                                dbg->tid, hit_addr);
+                        }
+                        else
+                        {
+                            printf("breakpoint at %p (not tracked)\n", hit_addr);
+                            show_pid_tid(dbg);
+                            if (!show_source_line(dbg, ctx.Rip))
+                                print_disassembly(dbg, ctx.Rip, 1);
+                            source_shown = 1;
+                        }
                     }
                 }
 
@@ -319,6 +399,14 @@ void debugger_loop(debugger_t *dbg)
                             GetThreadContext(dbg->thread, &ctx);
                             watchpoint_report(dbg, ws, ctx.Rip);
                             show_pid_tid(dbg);
+
+                            if (auto_continue)
+                            {
+                                printf("(not focused, continuing)\n");
+                                break;
+                            }
+
+                            dbg->locked_tid = dbg->tid;
                             if (!show_source_line(dbg, ctx.Rip))
                                 print_disassembly(dbg, ctx.Rip, 1);
                             source_shown = 1;
@@ -335,6 +423,7 @@ void debugger_loop(debugger_t *dbg)
                     if (breakpoint_rearm_pending(dbg))
                     {
                         finish_breakpoint_rearm(dbg);
+                        resume_other_threads(dbg);
 
                         /* a user step/next was also in flight: keep it
                            moving, this tick was consumed internally */
@@ -353,6 +442,7 @@ void debugger_loop(debugger_t *dbg)
                     if (dbg->leak_tracking && leak_rearm_pending(dbg))
                     {
                         leak_finish_rearm(dbg);
+                        resume_other_threads(dbg);
 
                         /* a user step/next was also in flight: keep it
                            moving, this tick was consumed internally */
@@ -417,11 +507,22 @@ void debugger_loop(debugger_t *dbg)
                         dbg->step_line = 0;
                     }
 
+                    if (auto_continue)
+                        break;
+
+                    dbg->locked_tid = dbg->tid;
                     printf("step -> RIP=0x%llx\n", ctx.Rip);
                     show_pid_tid(dbg);
                     if (!show_source_line(dbg, ctx.Rip))
                         print_disassembly(dbg, ctx.Rip, 1);
                     source_shown = 1;
+                }
+
+                if (auto_continue)
+                {
+                    dbg->list_next_line = 0;
+                    dbg->list_file[0] = '\0';
+                    break;
                 }
 
                 {

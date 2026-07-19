@@ -131,8 +131,9 @@ enum yysymbol_kind_t
   YYSYMBOL_KW_PRINT = 27,                  /* KW_PRINT  */
   YYSYMBOL_KW_SET = 28,                    /* KW_SET  */
   YYSYMBOL_KW_SETPRINTPRETTY = 29,         /* KW_SETPRINTPRETTY  */
-  YYSYMBOL_YYACCEPT = 30,                  /* $accept  */
-  YYSYMBOL_line = 31                       /* line  */
+  YYSYMBOL_KW_THREAD = 30,                 /* KW_THREAD  */
+  YYSYMBOL_YYACCEPT = 31,                  /* $accept  */
+  YYSYMBOL_line = 32                       /* line  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -149,7 +150,7 @@ typedef enum yysymbol_kind_t yysymbol_kind_t;
 void cparseerror(debugger_t *dbg, cmd_action_t *action, const char *s);
 int  cparselex(void);
 
-#line 153 "cmdline_parser.tab.c"
+#line 154 "cmdline_parser.tab.c"
 
 #ifdef short
 # undef short
@@ -470,21 +471,21 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  43
+#define YYFINAL  45
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   42
+#define YYLAST   44
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  30
+#define YYNTOKENS  31
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  2
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  32
+#define YYNRULES  34
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  44
+#define YYNSTATES  46
 
 /* YYMAXUTOK -- Last valid token kind.  */
-#define YYMAXUTOK   284
+#define YYMAXUTOK   285
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
@@ -526,7 +527,7 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
-      25,    26,    27,    28,    29
+      25,    26,    27,    28,    29,    30
 };
 
 #if CPARSEDEBUG
@@ -536,7 +537,7 @@ static const yytype_int8 yyrline[] =
        0,    46,    46,    47,    48,    49,    50,    51,    52,    53,
       54,    55,    56,    57,    58,    59,    60,    61,    62,    63,
       64,    65,    66,    67,    68,    69,    70,    71,    72,    73,
-      74,    75,    76
+      74,    75,    76,    77,    78
 };
 #endif
 
@@ -557,7 +558,7 @@ static const char *const yytname[] =
   "KW_CONTINUE", "KW_STEP", "KW_N", "KW_UP", "KW_TB", "KW_RUN", "KW_KILL",
   "KW_HELP", "KW_QUIT", "KW_X", "KW_DIS", "KW_LIST", "KW_LINES", "KW_LEAK",
   "KW_SHOW", "KW_WATCH", "KW_PRINT", "KW_SET", "KW_SETPRINTPRETTY",
-  "$accept", "line", YY_NULLPTR
+  "KW_THREAD", "$accept", "line", YY_NULLPTR
 };
 
 static const char *
@@ -581,11 +582,11 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -3,    -4,    -2,    24,    25,    26,    -4,    -4,    -4,    -4,
-      -4,    -4,    -4,    -4,    -4,    27,    -4,    28,    29,    30,
-      31,    32,    33,    34,    35,    36,    37,    42,    -4,    -4,
+      -3,    -4,    -2,    25,    26,    27,    -4,    -4,    -4,    -4,
+      -4,    -4,    -4,    -4,    -4,    28,    -4,    29,    30,    31,
+      32,    33,    34,    35,    36,    37,    38,    40,    44,    -4,
       -4,    -4,    -4,    -4,    -4,    -4,    -4,    -4,    -4,    -4,
-      -4,    -4,    -4,    -4
+      -4,    -4,    -4,    -4,    -4,    -4
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -593,11 +594,11 @@ static const yytype_int8 yypact[] =
    means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
-       2,    32,     4,     6,     8,    10,    11,    12,    13,    14,
+       2,    34,     4,     6,     8,    10,    11,    12,    13,    14,
       15,    16,    19,    17,    18,     0,    21,     0,     0,     0,
-       0,     0,     0,     0,     0,     0,     0,     0,     3,     5,
-       7,     9,    20,    22,    23,    24,    25,    26,    27,    28,
-      29,    30,    31,     1
+       0,     0,     0,     0,     0,     0,     0,    33,     0,     3,
+       5,     7,     9,    20,    22,    23,    24,    25,    26,    27,
+      28,    29,    30,    31,    32,     1
 };
 
 /* YYPGOTO[NTERM-NUM].  */
@@ -609,7 +610,7 @@ static const yytype_int8 yypgoto[] =
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,    27
+       0,    28
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -617,20 +618,20 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-       1,    28,     2,     3,     4,     5,     6,     7,     8,     9,
+       1,    29,     2,     3,     4,     5,     6,     7,     8,     9,
       10,    11,    12,    13,    14,    15,    16,    17,    18,    19,
-      20,    21,    22,    23,    24,    25,    26,    29,    30,    31,
-       0,    32,    33,    34,    35,    36,    37,    38,    39,    40,
-      41,    42,    43
+      20,    21,    22,    23,    24,    25,    26,    27,    30,    31,
+      32,     0,    33,    34,    35,    36,    37,    38,    39,    40,
+      41,    42,    43,    44,    45
 };
 
 static const yytype_int8 yycheck[] =
 {
        3,     3,     5,     6,     7,     8,     9,    10,    11,    12,
       13,    14,    15,    16,    17,    18,    19,    20,    21,    22,
-      23,    24,    25,    26,    27,    28,    29,     3,     3,     3,
-      -1,     4,     4,     4,     4,     4,     4,     4,     4,     4,
-       4,     4,     0
+      23,    24,    25,    26,    27,    28,    29,    30,     3,     3,
+       3,    -1,     4,     4,     4,     4,     4,     4,     4,     4,
+       4,     4,     4,     3,     0
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -639,18 +640,18 @@ static const yytype_int8 yystos[] =
 {
        0,     3,     5,     6,     7,     8,     9,    10,    11,    12,
       13,    14,    15,    16,    17,    18,    19,    20,    21,    22,
-      23,    24,    25,    26,    27,    28,    29,    31,     3,     3,
-       3,     3,     4,     4,     4,     4,     4,     4,     4,     4,
-       4,     4,     4,     0
+      23,    24,    25,    26,    27,    28,    29,    30,    32,     3,
+       3,     3,     3,     4,     4,     4,     4,     4,     4,     4,
+       4,     4,     4,     4,     3,     0
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    30,    31,    31,    31,    31,    31,    31,    31,    31,
-      31,    31,    31,    31,    31,    31,    31,    31,    31,    31,
-      31,    31,    31,    31,    31,    31,    31,    31,    31,    31,
-      31,    31,    31
+       0,    31,    32,    32,    32,    32,    32,    32,    32,    32,
+      32,    32,    32,    32,    32,    32,    32,    32,    32,    32,
+      32,    32,    32,    32,    32,    32,    32,    32,    32,    32,
+      32,    32,    32,    32,    32
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
@@ -659,7 +660,7 @@ static const yytype_int8 yyr2[] =
        0,     2,     0,     2,     1,     2,     1,     2,     1,     2,
        1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
        2,     1,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     1
+       2,     2,     2,     1,     1
 };
 
 
@@ -1399,191 +1400,203 @@ yyreduce:
   case 2: /* line: %empty  */
 #line 46 "cmdline_parser.y"
                                  { }
-#line 1403 "cmdline_parser.tab.c"
+#line 1404 "cmdline_parser.tab.c"
     break;
 
   case 3: /* line: KW_BREAK ARGWORD  */
 #line 47 "cmdline_parser.y"
                                     { do_break(dbg, (yyvsp[0].text).s); }
-#line 1409 "cmdline_parser.tab.c"
+#line 1410 "cmdline_parser.tab.c"
     break;
 
   case 4: /* line: KW_BREAK  */
 #line 48 "cmdline_parser.y"
                                  { printf("usage: break <addr|symbol|file:line>\n"); }
-#line 1415 "cmdline_parser.tab.c"
+#line 1416 "cmdline_parser.tab.c"
     break;
 
   case 5: /* line: KW_DEL ARGWORD  */
 #line 49 "cmdline_parser.y"
                                     { do_del(dbg, (yyvsp[0].text).s); }
-#line 1421 "cmdline_parser.tab.c"
+#line 1422 "cmdline_parser.tab.c"
     break;
 
   case 6: /* line: KW_DEL  */
 #line 50 "cmdline_parser.y"
                                  { printf("usage: del <addr|symbol|file:line>\n"); }
-#line 1427 "cmdline_parser.tab.c"
+#line 1428 "cmdline_parser.tab.c"
     break;
 
   case 7: /* line: KW_WDEL ARGWORD  */
 #line 51 "cmdline_parser.y"
                                     { do_wdel(dbg, (yyvsp[0].text).s); }
-#line 1433 "cmdline_parser.tab.c"
+#line 1434 "cmdline_parser.tab.c"
     break;
 
   case 8: /* line: KW_WDEL  */
 #line 52 "cmdline_parser.y"
                                  { printf("usage: wdel <addr|symbol>\n"); }
-#line 1439 "cmdline_parser.tab.c"
+#line 1440 "cmdline_parser.tab.c"
     break;
 
   case 9: /* line: KW_SYMS ARGWORD  */
 #line 53 "cmdline_parser.y"
                                     { do_syms(dbg, (yyvsp[0].text).s); }
-#line 1445 "cmdline_parser.tab.c"
+#line 1446 "cmdline_parser.tab.c"
     break;
 
   case 10: /* line: KW_SYMS  */
 #line 54 "cmdline_parser.y"
                                  { printf("usage: syms <name>\n"); }
-#line 1451 "cmdline_parser.tab.c"
+#line 1452 "cmdline_parser.tab.c"
     break;
 
   case 11: /* line: KW_REGS  */
 #line 55 "cmdline_parser.y"
                                  { do_regs(dbg); }
-#line 1457 "cmdline_parser.tab.c"
+#line 1458 "cmdline_parser.tab.c"
     break;
 
   case 12: /* line: KW_SI  */
 #line 56 "cmdline_parser.y"
                                  { do_si(dbg, action); }
-#line 1463 "cmdline_parser.tab.c"
+#line 1464 "cmdline_parser.tab.c"
     break;
 
   case 13: /* line: KW_CONTINUE  */
 #line 57 "cmdline_parser.y"
                                  { do_continue(dbg, action); }
-#line 1469 "cmdline_parser.tab.c"
+#line 1470 "cmdline_parser.tab.c"
     break;
 
   case 14: /* line: KW_STEP  */
 #line 58 "cmdline_parser.y"
                                  { do_step(dbg, action); }
-#line 1475 "cmdline_parser.tab.c"
+#line 1476 "cmdline_parser.tab.c"
     break;
 
   case 15: /* line: KW_N  */
 #line 59 "cmdline_parser.y"
                                  { do_next(dbg, action); }
-#line 1481 "cmdline_parser.tab.c"
+#line 1482 "cmdline_parser.tab.c"
     break;
 
   case 16: /* line: KW_UP  */
 #line 60 "cmdline_parser.y"
                                  { do_up(dbg, action); }
-#line 1487 "cmdline_parser.tab.c"
+#line 1488 "cmdline_parser.tab.c"
     break;
 
   case 17: /* line: KW_RUN  */
 #line 61 "cmdline_parser.y"
                                  { do_run(dbg, action); }
-#line 1493 "cmdline_parser.tab.c"
+#line 1494 "cmdline_parser.tab.c"
     break;
 
   case 18: /* line: KW_KILL  */
 #line 62 "cmdline_parser.y"
                                  { do_kill(dbg, action); }
-#line 1499 "cmdline_parser.tab.c"
+#line 1500 "cmdline_parser.tab.c"
     break;
 
   case 19: /* line: KW_TB  */
 #line 63 "cmdline_parser.y"
                                  { do_tb(dbg); }
-#line 1505 "cmdline_parser.tab.c"
+#line 1506 "cmdline_parser.tab.c"
     break;
 
   case 20: /* line: KW_HELP STRING  */
 #line 64 "cmdline_parser.y"
                                  { do_help((yyvsp[0].text).s); }
-#line 1511 "cmdline_parser.tab.c"
+#line 1512 "cmdline_parser.tab.c"
     break;
 
   case 21: /* line: KW_QUIT  */
 #line 65 "cmdline_parser.y"
                                  { exit(0); }
-#line 1517 "cmdline_parser.tab.c"
+#line 1518 "cmdline_parser.tab.c"
     break;
 
   case 22: /* line: KW_X STRING  */
 #line 66 "cmdline_parser.y"
                                  { do_x(dbg, (yyvsp[0].text).s); }
-#line 1523 "cmdline_parser.tab.c"
+#line 1524 "cmdline_parser.tab.c"
     break;
 
   case 23: /* line: KW_DIS STRING  */
 #line 67 "cmdline_parser.y"
                                  { do_dis(dbg, (yyvsp[0].text).s); }
-#line 1529 "cmdline_parser.tab.c"
+#line 1530 "cmdline_parser.tab.c"
     break;
 
   case 24: /* line: KW_LIST STRING  */
 #line 68 "cmdline_parser.y"
                                  { do_list(dbg, (yyvsp[0].text).s); }
-#line 1535 "cmdline_parser.tab.c"
+#line 1536 "cmdline_parser.tab.c"
     break;
 
   case 25: /* line: KW_LINES STRING  */
 #line 69 "cmdline_parser.y"
                                  { do_lines(dbg, (yyvsp[0].text).s); }
-#line 1541 "cmdline_parser.tab.c"
+#line 1542 "cmdline_parser.tab.c"
     break;
 
   case 26: /* line: KW_LEAK STRING  */
 #line 70 "cmdline_parser.y"
                                  { do_leak(dbg, (yyvsp[0].text).s); }
-#line 1547 "cmdline_parser.tab.c"
+#line 1548 "cmdline_parser.tab.c"
     break;
 
   case 27: /* line: KW_SHOW STRING  */
 #line 71 "cmdline_parser.y"
                                  { do_show(dbg, (yyvsp[0].text).s); }
-#line 1553 "cmdline_parser.tab.c"
+#line 1554 "cmdline_parser.tab.c"
     break;
 
   case 28: /* line: KW_WATCH STRING  */
 #line 72 "cmdline_parser.y"
                                  { do_watch(dbg, (yyvsp[0].text).s); }
-#line 1559 "cmdline_parser.tab.c"
+#line 1560 "cmdline_parser.tab.c"
     break;
 
   case 29: /* line: KW_PRINT STRING  */
 #line 73 "cmdline_parser.y"
                                  { do_print(dbg, (yyvsp[0].text).s); }
-#line 1565 "cmdline_parser.tab.c"
+#line 1566 "cmdline_parser.tab.c"
     break;
 
   case 30: /* line: KW_SET STRING  */
 #line 74 "cmdline_parser.y"
                                  { do_set(dbg, (yyvsp[0].text).s); }
-#line 1571 "cmdline_parser.tab.c"
+#line 1572 "cmdline_parser.tab.c"
     break;
 
   case 31: /* line: KW_SETPRINTPRETTY STRING  */
 #line 75 "cmdline_parser.y"
                                  { do_set_print_pretty(dbg, (yyvsp[0].text).s); }
-#line 1577 "cmdline_parser.tab.c"
+#line 1578 "cmdline_parser.tab.c"
     break;
 
-  case 32: /* line: ARGWORD  */
+  case 32: /* line: KW_THREAD ARGWORD  */
 #line 76 "cmdline_parser.y"
+                                 { do_thread(dbg, (yyvsp[0].text).s); }
+#line 1584 "cmdline_parser.tab.c"
+    break;
+
+  case 33: /* line: KW_THREAD  */
+#line 77 "cmdline_parser.y"
+                                 { printf("usage: thread <id>\n"); }
+#line 1590 "cmdline_parser.tab.c"
+    break;
+
+  case 34: /* line: ARGWORD  */
+#line 78 "cmdline_parser.y"
                                     { do_unknown((yyvsp[0].text).s); }
-#line 1583 "cmdline_parser.tab.c"
+#line 1596 "cmdline_parser.tab.c"
     break;
 
 
-#line 1587 "cmdline_parser.tab.c"
+#line 1600 "cmdline_parser.tab.c"
 
       default: break;
     }
@@ -1807,7 +1820,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 79 "cmdline_parser.y"
+#line 81 "cmdline_parser.y"
 
 
 void cparseerror(debugger_t *dbg, cmd_action_t *action, const char *s)

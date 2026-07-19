@@ -34,12 +34,12 @@ static DWORD64 encode_size(int size)
     }
 }
 
-/* Write DR0-DR3 and DR7 into the thread context to arm/disarm watchpoints. */
-static void apply_watchpoints(debugger_t *dbg)
+/* Write DR0-DR3 and DR7 into one thread's context to arm/disarm watchpoints. */
+static void apply_watchpoints_to(debugger_t *dbg, HANDLE thread)
 {
     CONTEXT ctx = {0};
     ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-    GetThreadContext(dbg->thread, &ctx);
+    GetThreadContext(thread, &ctx);
 
     /* Clear all local enable bits and condition/size fields */
     ctx.Dr0 = 0;
@@ -74,7 +74,16 @@ static void apply_watchpoints(debugger_t *dbg)
         ctx.Dr7 |= (sz   << (18 + slot * 4));
     }
 
-    SetThreadContext(dbg->thread, &ctx);
+    SetThreadContext(thread, &ctx);
+}
+
+/* DR registers are per-thread: apply the current watchpoint set to every
+ * live thread so a watchpoint fires no matter which one touches the
+ * watched memory. */
+void apply_watchpoints(debugger_t *dbg)
+{
+    for (thread_entry_t *t = dbg->threads; t != NULL; t = t->next)
+        apply_watchpoints_to(dbg, t->handle);
 }
 
 /* Find a free slot (0-3). Returns -1 if all used. */
