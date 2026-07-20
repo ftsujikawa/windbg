@@ -3,11 +3,15 @@
 
 #include "debugger.h"
 
-/* Add a thread (tid + its debug-API handle) to dbg->threads. */
-void register_thread(debugger_t *dbg, DWORD tid, HANDLE handle);
+/* Add a thread (tid + its debug-API handle) to *list. Takes the owning
+ * process's thread-list head directly (&dbg->threads for the active
+ * process, or &entry->threads for a backgrounded process_entry_t) so a
+ * thread belonging to a non-active process can be registered without
+ * disturbing the active process's state. */
+void register_thread(thread_entry_t **list, DWORD tid, HANDLE handle);
 
-/* Remove tid from dbg->threads and close its handle. */
-void unregister_thread(debugger_t *dbg, DWORD tid);
+/* Remove tid from *list and close its handle. */
+void unregister_thread(thread_entry_t **list, DWORD tid);
 
 /* Look up the handle registered for tid, or NULL if not found. */
 HANDLE find_thread_handle(debugger_t *dbg, DWORD tid);

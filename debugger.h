@@ -46,6 +46,71 @@ typedef struct thread_entry
     struct thread_entry *next;
 } thread_entry_t;
 
+/* One entry per tracked process OTHER than the currently active one (see
+ * processes.c). Holds a saved copy of debugger_t's per-process fields --
+ * whichever process is "active" keeps its state directly on debugger_t
+ * instead of here; switch_active_process() swaps a process's state between
+ * this struct and debugger_t's fields. Field set mirrors debugger_t's
+ * per-process fields 1:1 (everything except process/thread/pid/tid/
+ * locked_tid/target_program/print_pretty, which are session-wide, not
+ * per-process). */
+typedef struct process_entry
+{
+    DWORD pid;
+    HANDLE process;
+    char image_path[512];
+
+    HANDLE sym_handle;
+    int symbols_initialized;
+
+    thread_entry_t *threads;
+
+    breakpoint_t *breakpoints;
+
+    void *breakpoint_addr;
+    BYTE original_byte;
+
+    void *temp_bp_addr;
+    BYTE temp_bp_byte;
+
+    void *bp_rearm_addr;
+    BYTE bp_rearm_byte;
+
+    int si_requested;
+
+    int next_mode;
+    DWORD next_line;
+    DWORD64 next_rsp;
+
+    int step_mode;
+    DWORD step_line;
+
+    char list_file[512];
+    DWORD list_next_line;
+
+    int leak_tracking;
+    void *malloc_addr;
+    BYTE malloc_orig_byte;
+    void *calloc_addr;
+    BYTE calloc_orig_byte;
+    void *realloc_addr;
+    BYTE realloc_orig_byte;
+    void *free_addr;
+    BYTE free_orig_byte;
+    void *malloc_ret_addr;
+    BYTE malloc_ret_byte;
+    size_t pending_alloc_size;
+    char current_alloc_func[32];
+    void *leak_rearm_addr;
+    BYTE leak_rearm_byte;
+    alloc_info_t *allocations;
+
+    watchpoint_t watchpoints[4];
+    int watch_count;
+
+    struct process_entry *next;
+} process_entry_t;
+
 typedef struct
 {
     HANDLE process;
@@ -95,7 +160,14 @@ typedef struct
     char list_file[512];
     DWORD list_next_line;
 
-    char target_program[512];
+    char target_program[512];  /* root process's exe path only, for `run` restart */
+
+    /* active process's own image path (root: same as target_program; child:
+       resolved via QueryFullProcessImageNameA at CREATE_PROCESS_DEBUG_EVENT).
+       Only used to populate a process_entry_t's image_path when this process
+       is backgrounded (see processes.c) -- not needed for anything else,
+       since symbols are loaded once at process-creation time. */
+    char image_path[512];
 
     int print_pretty;
 
@@ -127,6 +199,11 @@ typedef struct
        always point at one of these -- whichever thread is "current" for
        inspection/stepping */
     thread_entry_t *threads;
+
+    /* every tracked process EXCEPT the currently active one (dbg->pid /
+       dbg->process); see processes.c. The active process's own equivalent
+       state lives directly in this struct's fields above. */
+    process_entry_t *processes;
 
 } debugger_t;
 int debugger_start(debugger_t *dbg, const char *program);

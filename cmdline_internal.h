@@ -47,6 +47,7 @@ void do_lines(debugger_t *dbg, const char *arg);
 void do_leak(debugger_t *dbg, const char *arg);
 void do_show(debugger_t *dbg, const char *arg);
 void do_thread(debugger_t *dbg, const char *arg);
+void do_process(debugger_t *dbg, const char *arg);
 void do_watch(debugger_t *dbg, const char *arg);
 void do_print(debugger_t *dbg, const char *arg);
 void do_set(debugger_t *dbg, const char *arg);

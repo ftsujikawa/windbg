@@ -64,6 +64,7 @@ static void capture(char *dst, size_t dstsz, const char *src)
 ^"p"/{BOUND}         { BEGIN(RAWLINE); return KW_PRINT; }
 ^"set"/{BOUND}       { BEGIN(RAWLINE); return KW_SET; }
 ^"thread"/{BOUND}    { return KW_THREAD; }
+^"process"/{BOUND}   { return KW_PROCESS; }
 }
 
 <INITIAL>[^ \t\r\n]+ {

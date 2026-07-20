@@ -38,7 +38,7 @@ int  cparselex(void);
 %token KW_REGS KW_SI KW_CONTINUE KW_STEP KW_N KW_UP KW_TB KW_RUN KW_KILL
 %token KW_HELP KW_QUIT
 %token KW_X KW_DIS KW_LIST KW_LINES KW_LEAK KW_SHOW KW_WATCH KW_PRINT KW_SET
-%token KW_SETPRINTPRETTY KW_THREAD
+%token KW_SETPRINTPRETTY KW_THREAD KW_PROCESS
 
 %%
 
@@ -75,6 +75,8 @@ line:
     | KW_SETPRINTPRETTY STRING   { do_set_print_pretty(dbg, $2.s); }
     | KW_THREAD ARGWORD          { do_thread(dbg, $2.s); }
     | KW_THREAD                  { printf("usage: thread <id>\n"); }
+    | KW_PROCESS ARGWORD         { do_process(dbg, $2.s); }
+    | KW_PROCESS                 { printf("usage: process <id>\n"); }
     | ARGWORD                       { do_unknown($1.s); }
     ;
 

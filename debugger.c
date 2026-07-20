@@ -9,6 +9,7 @@
 #include "leakcheck.h"
 #include "watchpoints.h"
 #include "threads.h"
+#include "processes.h"
 
 /* Print PID and TID at a stop point before source/disassembly output. */
 static void show_pid_tid(debugger_t *dbg)
@@ -39,7 +40,7 @@ int debugger_start(debugger_t *dbg, const char *program)
         NULL,
         NULL,
         FALSE,
-        DEBUG_ONLY_THIS_PROCESS,
+        DEBUG_PROCESS,
         NULL,
         NULL,
         &si,
@@ -70,6 +71,7 @@ int debugger_start(debugger_t *dbg, const char *program)
     dbg->sym_handle = dbg->process;
 
     strncpy_s(dbg->target_program, sizeof(dbg->target_program), program, sizeof(dbg->target_program) - 1);
+    strncpy_s(dbg->image_path, sizeof(dbg->image_path), program, sizeof(dbg->image_path) - 1);
 
     printf("started pid=%lu\n", dbg->pid);
 
@@ -98,6 +100,7 @@ void debugger_restart(debugger_t *dbg)
     }
 
     free_all_threads(dbg);
+    free_all_processes(dbg);
 
     if (dbg->sym_handle)
         SymCleanup(dbg->sym_handle);
@@ -140,28 +143,80 @@ void debugger_loop(debugger_t *dbg)
         {
             case CREATE_PROCESS_DEBUG_EVENT:
 
-                dbg->tid = ev.dwThreadId;
-                register_thread(dbg, dbg->tid, dbg->thread);
-
-                init_symbols(dbg);
-
-                DWORD64 base =
-                    SymLoadModuleEx(
-                        dbg->sym_handle,
-                        NULL,
-                        dbg->target_program,
-                        NULL,
-                        (DWORD64)
-                        ev.u.CreateProcessInfo.lpBaseOfImage,
-                        0,
-                        NULL,
-                        0
-                    );
-
-                if (!base)
+                if (ev.dwProcessId == dbg->pid)
                 {
-                    printf("SymLoadModuleEx err=%lu\n",
-                        GetLastError());
+                    /* the root process, on its very first event --
+                       debugger_start already set dbg->pid/process/tid/thread */
+                    dbg->tid = ev.dwThreadId;
+                    register_thread(&dbg->threads, dbg->tid, dbg->thread);
+
+                    init_symbols(dbg);
+
+                    DWORD64 base =
+                        SymLoadModuleEx(
+                            dbg->sym_handle,
+                            NULL,
+                            dbg->target_program,
+                            NULL,
+                            (DWORD64)
+                            ev.u.CreateProcessInfo.lpBaseOfImage,
+                            0,
+                            NULL,
+                            0
+                        );
+
+                    if (!base)
+                    {
+                        printf("SymLoadModuleEx err=%lu\n",
+                            GetLastError());
+                    }
+                }
+                else
+                {
+                    /* a child process the debuggee just spawned (DEBUG_PROCESS
+                       follows the whole process tree). Register it as a
+                       backgrounded process, then briefly activate it to reuse
+                       the exact same symbol/thread init as the root case
+                       above, and swap back to whichever process was actually
+                       focused -- this doesn't disturb that process since no
+                       user interaction happens between debug events. */
+                    char image_path[512] = {0};
+                    DWORD size = sizeof(image_path);
+                    if (!QueryFullProcessImageNameA(ev.u.CreateProcessInfo.hProcess, 0, image_path, &size))
+                        image_path[0] = '\0';
+
+                    register_new_process(dbg, ev.dwProcessId, ev.u.CreateProcessInfo.hProcess, image_path);
+
+                    DWORD prev_pid = dbg->pid;
+                    switch_active_process(dbg, ev.dwProcessId);
+
+                    dbg->sym_handle = dbg->process;
+                    register_thread(&dbg->threads, ev.dwThreadId, ev.u.CreateProcessInfo.hThread);
+
+                    init_symbols(dbg);
+
+                    DWORD64 base =
+                        SymLoadModuleEx(
+                            dbg->sym_handle,
+                            NULL,
+                            image_path,
+                            NULL,
+                            (DWORD64)
+                            ev.u.CreateProcessInfo.lpBaseOfImage,
+                            0,
+                            NULL,
+                            0
+                        );
+
+                    if (!base)
+                    {
+                        printf("SymLoadModuleEx err=%lu\n",
+                            GetLastError());
+                    }
+
+                    switch_active_process(dbg, prev_pid);
+
+                    printf("process created id=%lu\n", ev.dwProcessId);
                 }
 
                 break;
@@ -171,8 +226,20 @@ void debugger_loop(debugger_t *dbg)
                 /* Doesn't touch dbg->tid/dbg->thread: this must not disturb
                    whatever thread is currently "current" for an in-flight
                    step/next/rearm sequence. */
-                register_thread(dbg, ev.dwThreadId, ev.u.CreateThread.hThread);
-                apply_watchpoints(dbg);
+                if (ev.dwProcessId == dbg->pid)
+                {
+                    register_thread(&dbg->threads, ev.dwThreadId, ev.u.CreateThread.hThread);
+                    apply_watchpoints(dbg);
+                }
+                else
+                {
+                    process_entry_t *p = find_background_process(dbg, ev.dwProcessId);
+                    if (p != NULL)
+                    {
+                        register_thread(&p->threads, ev.dwThreadId, ev.u.CreateThread.hThread);
+                        apply_watchpoints_to_thread(p->watchpoints, p->watch_count, ev.u.CreateThread.hThread);
+                    }
+                }
 
                 printf("thread created id=%lu\n", ev.dwThreadId);
 
@@ -188,7 +255,16 @@ void debugger_loop(debugger_t *dbg)
                 if (dbg->locked_tid == ev.dwThreadId)
                     dbg->locked_tid = 0;
 
-                unregister_thread(dbg, ev.dwThreadId);
+                if (ev.dwProcessId == dbg->pid)
+                {
+                    unregister_thread(&dbg->threads, ev.dwThreadId);
+                }
+                else
+                {
+                    process_entry_t *p = find_background_process(dbg, ev.dwProcessId);
+                    if (p != NULL)
+                        unregister_thread(&p->threads, ev.dwThreadId);
+                }
 
                 break;
 
@@ -197,6 +273,15 @@ void debugger_loop(debugger_t *dbg)
 #endif
 
             case EXCEPTION_DEBUG_EVENT:
+
+                /* This event may be for a process other than whichever is
+                   currently active (DEBUG_PROCESS delivers events for the
+                   whole process tree through this same loop); swap that
+                   process's state onto dbg first so every mechanic below
+                   (breakpoints, watchpoints, stepping, auto_continue) reads
+                   the correct one. */
+                if (ev.dwProcessId != dbg->pid)
+                    switch_active_process(dbg, ev.dwProcessId);
 
                 dbg->tid = ev.dwThreadId;
                 dbg->thread = find_thread_handle(dbg, dbg->tid);
@@ -551,21 +636,23 @@ void debugger_loop(debugger_t *dbg)
 
             case EXIT_PROCESS_DEBUG_EVENT:
 
-                printf("process exited with code %lu\n",
-                    ev.u.ExitProcess.dwExitCode);
+                if (!unregister_process(dbg, ev.dwProcessId, ev.u.ExitProcess.dwExitCode))
+                {
+                    /* that was the last tracked process -- end the session */
+                    ContinueDebugEvent(
+                        ev.dwProcessId,
+                        ev.dwThreadId,
+                        DBG_CONTINUE
+                    );
 
-                if (dbg->leak_tracking)
-                    print_leaks(dbg);
+                    printf("(tdb) process has exited. type 'quit' to exit.\n");
+                    command_loop(dbg);
+                    return;
+                }
 
-                ContinueDebugEvent(
-                    ev.dwProcessId,
-                    ev.dwThreadId,
-                    DBG_CONTINUE
-                );
-
-                printf("(tdb) process has exited. type 'quit' to exit.\n");
-                command_loop(dbg);
-                return;
+                /* other processes remain tracked; keep looping without
+                   stopping interactively, same treatment as a thread exit */
+                break;
         }
 
         ContinueDebugEvent(

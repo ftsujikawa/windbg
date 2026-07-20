@@ -55,6 +55,9 @@
     <ClCompile Include="threads.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="processes.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="expr_parser.tab.c">
       <Filter>Generated Files</Filter>
     </ClCompile>
@@ -97,6 +100,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="threads.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="processes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="expr_internal.h">

@@ -158,6 +158,7 @@
     <ClCompile Include="expr.c" />
     <ClCompile Include="watchpoints.c" />
     <ClCompile Include="threads.c" />
+    <ClCompile Include="processes.c" />
     <ClCompile Include="expr_parser.tab.c" />
     <ClCompile Include="expr_lexer.yy.c" />
     <ClCompile Include="cmdline_parser.tab.c" />
@@ -175,6 +176,7 @@
     <ClInclude Include="expr.h" />
     <ClInclude Include="watchpoints.h" />
     <ClInclude Include="threads.h" />
+    <ClInclude Include="processes.h" />
     <ClInclude Include="expr_internal.h" />
     <ClInclude Include="cmdline_internal.h" />
     <ClInclude Include="expr_parser.tab.h" />

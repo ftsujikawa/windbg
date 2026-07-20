@@ -10,6 +10,12 @@
  * the current watchpoint set. */
 void apply_watchpoints(debugger_t *dbg);
 
+/* Apply an explicit watchpoint set to a single thread. Used for a thread
+ * created in a process that is NOT currently active (see processes.c /
+ * debugger.c's CREATE_THREAD_DEBUG_EVENT), where dbg->watchpoints doesn't
+ * describe that process. */
+void apply_watchpoints_to_thread(watchpoint_t *wps, int count, HANDLE thread);
+
 /* Set a hardware watchpoint on addr.
  * type : WATCH_WRITE (1) or WATCH_RW (2)
  * size : 1, 2, 4, or 8

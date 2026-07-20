@@ -13,6 +13,7 @@
 #include "leakcheck.h"
 #include "watchpoints.h"
 #include "threads.h"
+#include "processes.h"
 
 void command_loop(debugger_t *dbg)
 {
@@ -362,15 +363,18 @@ static const help_entry_t help_table[] = {
       "                              formatting for 'print' (shows the\n"
       "                              current state if [on|off] is omitted)" },
 
-    { {"show", NULL, NULL}, "show [locals|args|globals|bp|leaks|wp|threads]",
+    { {"show", NULL, NULL}, "show [locals|args|globals|bp|leaks|wp|threads|processes]",
       "Displays variables or internal state depending on the argument:\n"
       "  locals | args | globals   variables in the current scope\n"
       "  bp                        active breakpoints\n"
       "  wp                        active hardware watchpoints\n"
       "  leaks                     tracked, still-allocated blocks\n"
       "                            (see 'leak')\n"
-      "  threads                   live threads in the debuggee, marking\n"
-      "                            the current one (see 'thread')" },
+      "  threads                   live threads in the current process,\n"
+      "                            marking the current one (see 'thread')\n"
+      "  processes                 tracked processes (this one and any\n"
+      "                            child processes it spawned), marking\n"
+      "                            the current one (see 'process')" },
 
     { {"thread", NULL, NULL}, "thread <id>|lock|unlock",
       "Focus auto-pins to whichever thread first hits a tracked breakpoint,\n"
@@ -383,6 +387,13 @@ static const help_entry_t help_table[] = {
       "thread lock  re-pins focus to the current thread explicitly.\n"
       "thread unlock  releases the pin (every thread's stops show again\n"
       "             until one re-establishes the pin)." },
+
+    { {"process", NULL, NULL}, "process <id>",
+      "Switches focus to a different tracked process (the original target,\n"
+      "or a child process it spawned -- windbg follows the whole process\n"
+      "tree). Focus moves to that process's first known thread, same as\n"
+      "'thread <id>' pins focus to a specific thread. Use 'show processes'\n"
+      "to list ids." },
 
     { {"watch", NULL, NULL}, "watch [/r] [/1|/2|/4|/8] <addr|symbol|expr>",
       "Sets a hardware watchpoint (DR0-DR3) on <addr|symbol|expr>.\n"
@@ -425,9 +436,10 @@ static void print_help_summary(void)
     printf("  s / step                       -- step into (one source line)\n");
     printf("  set print pretty [on|off]      -- toggle pretty printing\n");
     printf("  set <lhs> = <expr>            -- assign value to variable or register\n");
-    printf("  show [locals|args|globals|bp|leaks|wp|threads] -- show variables / breakpoints / leaks / watchpoints / threads\n");
+    printf("  show [locals|args|globals|bp|leaks|wp|threads|processes] -- show variables / breakpoints / leaks / watchpoints / threads / processes\n");
     printf("  si                             -- single step (one instruction)\n");
     printf("  thread <id>|lock|unlock       -- switch/pin the focused thread (see 'help thread')\n");
+    printf("  process <id>                  -- switch focus to a different tracked process\n");
     printf("  watch [/r] [/1|/2|/4|/8] <addr|symbol> -- set hardware watchpoint (default: write, 4 bytes)\n");
     printf("  wdel <addr|symbol>             -- remove a hardware watchpoint\n");
     printf("  syms <name>                    -- show symbol details (address/size/type)\n");
@@ -662,8 +674,41 @@ void do_show(debugger_t *dbg, const char *arg)
         print_watchpoints(dbg);
     else if (strcmp(arg, "threads") == 0)
         print_threads(dbg);
+    else if (strcmp(arg, "processes") == 0)
+        print_processes(dbg);
     else
         show_variables(dbg, arg);
+}
+
+void do_process(debugger_t *dbg, const char *arg)
+{
+    DWORD pid = (DWORD)strtoul(arg, NULL, 0);
+
+    if (!switch_active_process(dbg, pid))
+    {
+        printf("no such process id=%lu\n", pid);
+        return;
+    }
+
+    /* focus within the newly active process: pick its first known thread,
+       same idea as 'thread <tid>' pinning focus on an explicit switch */
+    if (dbg->threads != NULL)
+    {
+        dbg->tid = dbg->threads->tid;
+        dbg->thread = dbg->threads->handle;
+        dbg->locked_tid = dbg->tid;
+
+        CONTEXT ctx = {0};
+        ctx.ContextFlags = CONTEXT_FULL;
+        GetThreadContext(dbg->thread, &ctx);
+
+        printf("switched to process id=%lu, thread id=%lu RIP=0x%llx\n",
+            dbg->pid, dbg->tid, ctx.Rip);
+    }
+    else
+    {
+        printf("switched to process id=%lu (no known threads yet)\n", dbg->pid);
+    }
 }
 
 void do_thread(debugger_t *dbg, const char *arg)

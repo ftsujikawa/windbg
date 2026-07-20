@@ -34,8 +34,13 @@ static DWORD64 encode_size(int size)
     }
 }
 
-/* Write DR0-DR3 and DR7 into one thread's context to arm/disarm watchpoints. */
-static void apply_watchpoints_to(debugger_t *dbg, HANDLE thread)
+/* Write DR0-DR3 and DR7 into one thread's context to arm/disarm an explicit
+ * watchpoint set. Takes the array/count directly (rather than a debugger_t)
+ * so it can be applied either to the active process's dbg->watchpoints or
+ * to a backgrounded process_entry_t's saved watchpoints (see
+ * apply_watchpoints_to_thread, used for a new thread appearing in a
+ * process that isn't currently active). */
+static void apply_watchpoints_set(watchpoint_t *wps, int count, HANDLE thread)
 {
     CONTEXT ctx = {0};
     ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
@@ -48,9 +53,9 @@ static void apply_watchpoints_to(debugger_t *dbg, HANDLE thread)
     ctx.Dr3 = 0;
     ctx.Dr7 = 0;
 
-    for (int i = 0; i < dbg->watch_count; i++)
+    for (int i = 0; i < count; i++)
     {
-        watchpoint_t *wp = &dbg->watchpoints[i];
+        watchpoint_t *wp = &wps[i];
         int slot = wp->slot;
 
         /* Set DRn address */
@@ -77,13 +82,21 @@ static void apply_watchpoints_to(debugger_t *dbg, HANDLE thread)
     SetThreadContext(thread, &ctx);
 }
 
-/* DR registers are per-thread: apply the current watchpoint set to every
- * live thread so a watchpoint fires no matter which one touches the
- * watched memory. */
+/* DR registers are per-thread: apply the active process's current
+ * watchpoint set to every one of its live threads so a watchpoint fires no
+ * matter which one touches the watched memory. */
 void apply_watchpoints(debugger_t *dbg)
 {
     for (thread_entry_t *t = dbg->threads; t != NULL; t = t->next)
-        apply_watchpoints_to(dbg, t->handle);
+        apply_watchpoints_set(dbg->watchpoints, dbg->watch_count, t->handle);
+}
+
+/* Apply an explicit (process-specific) watchpoint set to a single thread --
+ * used when a new thread appears in a process that is NOT currently active,
+ * so its own (backgrounded) watchpoints still get armed on that thread. */
+void apply_watchpoints_to_thread(watchpoint_t *wps, int count, HANDLE thread)
+{
+    apply_watchpoints_set(wps, count, thread);
 }
 
 /* Find a free slot (0-3). Returns -1 if all used. */

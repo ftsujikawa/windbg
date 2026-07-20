@@ -98,7 +98,8 @@ extern int cparsedebug;
     KW_PRINT = 282,                /* KW_PRINT  */
     KW_SET = 283,                  /* KW_SET  */
     KW_SETPRINTPRETTY = 284,       /* KW_SETPRINTPRETTY  */
-    KW_THREAD = 285                /* KW_THREAD  */
+    KW_THREAD = 285,               /* KW_THREAD  */
+    KW_PROCESS = 286               /* KW_PROCESS  */
   };
   typedef enum cparsetokentype cparsetoken_kind_t;
 #endif
@@ -111,7 +112,7 @@ union CPARSESTYPE
 
     ctext_t text;
 
-#line 115 "cmdline_parser.tab.h"
+#line 116 "cmdline_parser.tab.h"
 
 };
 typedef union CPARSESTYPE CPARSESTYPE;
