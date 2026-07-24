@@ -1200,6 +1200,32 @@ void* lookup_source_line_addr(
         return NULL;
     }
 
+    /* SymGetLineFromName64 can resolve a line that has no code of its own
+       (a bare declaration, a brace-only line, a blank line) to the
+       PRECEDING line that does, rather than the next one -- which can
+       land well before the requested line, in a different/earlier scope
+       entirely (e.g. requesting the line just after an if-block's closing
+       brace can resolve backward into the tail of that block instead of
+       forward into the code that follows it). If that happened, search
+       forward one line at a time for the first line at or after the one
+       requested, same idea as skip_function_prologue's forward scan below. */
+    if (line.LineNumber < line_number)
+    {
+        for (DWORD ln = line_number + 1; ln <= line_number + 100; ln++)
+        {
+            IMAGEHLP_LINE64 fwd = {0};
+            fwd.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+            LONG fwd_disp = 0;
+
+            if (SymGetLineFromName64(dbg->sym_handle, NULL, filename, ln, &fwd_disp, &fwd)
+                && fwd.LineNumber >= line_number)
+            {
+                line = fwd;
+                break;
+            }
+        }
+    }
+
     printf("%s:%lu -> 0x%llx\n",
         filename, line.LineNumber,
         line.Address);
