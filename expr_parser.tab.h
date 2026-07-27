@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.4.1.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -31,8 +31,9 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-/* Undocumented macros, especially those whose name start with YY_,
-   are private implementation details.  Do not rely on them.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
 
 #ifndef YY_EPARSE_EXPR_PARSER_TAB_H_INCLUDED
 # define YY_EPARSE_EXPR_PARSER_TAB_H_INCLUDED
@@ -62,27 +63,32 @@ extern int eparsedebug;
     typedef struct { char first[32]; char full[96]; } etypewords_t;
     typedef struct { int size; int is_ptr; } etypeinfo_t;
 
-#line 66 "expr_parser.tab.h"
+#line 67 "expr_parser.tab.h"
 
-/* Token type.  */
+/* Token kinds.  */
 #ifndef EPARSETOKENTYPE
 # define EPARSETOKENTYPE
   enum eparsetokentype
   {
-    NUM = 258,
-    IDENT = 259,
-    TYPEWORD = 260,
-    SIZEOF = 261,
-    ARROW = 262,
-    LSHIFT = 263,
-    RSHIFT = 264,
-    ANDAND = 265,
-    OROR = 266,
-    EQ = 267,
-    NEQ = 268,
-    LE = 269,
-    GE = 270
+    EPARSEEMPTY = -2,
+    EPARSEEOF = 0,                 /* "end of file"  */
+    EPARSEerror = 256,             /* error  */
+    EPARSEUNDEF = 257,             /* "invalid token"  */
+    NUM = 258,                     /* NUM  */
+    IDENT = 259,                   /* IDENT  */
+    TYPEWORD = 260,                /* TYPEWORD  */
+    SIZEOF = 261,                  /* SIZEOF  */
+    ARROW = 262,                   /* ARROW  */
+    LSHIFT = 263,                  /* LSHIFT  */
+    RSHIFT = 264,                  /* RSHIFT  */
+    ANDAND = 265,                  /* ANDAND  */
+    OROR = 266,                    /* OROR  */
+    EQ = 267,                      /* EQ  */
+    NEQ = 268,                     /* NEQ  */
+    LE = 269,                      /* LE  */
+    GE = 270                       /* GE  */
   };
+  typedef enum eparsetokentype eparsetoken_kind_t;
 #endif
 
 /* Value type.  */
@@ -96,7 +102,7 @@ union EPARSESTYPE
     etypewords_t words;
     etypeinfo_t  ty;
 
-#line 100 "expr_parser.tab.h"
+#line 106 "expr_parser.tab.h"
 
 };
 typedef union EPARSESTYPE EPARSESTYPE;
@@ -107,6 +113,8 @@ typedef union EPARSESTYPE EPARSESTYPE;
 
 extern EPARSESTYPE eparselval;
 
+
 int eparseparse (debugger_t *dbg);
+
 
 #endif /* !YY_EPARSE_EXPR_PARSER_TAB_H_INCLUDED  */

@@ -612,6 +612,19 @@ void disassemble_at(debugger_t *dbg, DWORD64 addr, int count)
 
     for (int i = 0; i < had_bp_count; i++)
     {
+        /* If this breakpoint's rearm is currently pending, its original
+         * byte must stay in place until the pending single real
+         * instruction executes and finish_breakpoint_rearm/leak_finish_rearm
+         * naturally re-arms it (debugger.c's STATUS_SINGLE_STEP handling).
+         * Rewriting 0xCC here -- e.g. when this disassembly is only being
+         * shown as a source-display fallback right after the hit -- would
+         * let the debuggee immediately re-hit the same INT3 instead of
+         * executing the real instruction, freezing execution at this
+         * address no matter what command is issued next. */
+        void *bp_addr = (void*)saved_bp_addr[i];
+        if (bp_addr == dbg->bp_rearm_addr || bp_addr == dbg->leak_rearm_addr)
+            continue;
+
         BYTE cc = 0xCC;
         WriteProcessMemory(dbg->process, (void*)saved_bp_addr[i], &cc, 1, &n);
         FlushInstructionCache(dbg->process, (void*)saved_bp_addr[i], 1);

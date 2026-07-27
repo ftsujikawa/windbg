@@ -406,6 +406,12 @@ static const help_entry_t help_table[] = {
       "every allocation is recorded with its call site; 'show leaks'\n"
       "lists blocks that were never freed." },
 
+    { {"x", NULL, NULL}, "x <addr|rsp+N|rsp-N|rbp+N|rbp-N>",
+      "Examines memory: reads and prints 16 bytes starting at <addr> as\n"
+      "hex bytes. <addr> is a hex address, or an offset from the current\n"
+      "thread's RSP/RBP (e.g. rsp+8, rbp-10).\n"
+      "Examples: x 7ff6a2b3c000     x rsp+8     x rbp-10" },
+
     { {"help", "h", NULL}, "help [command]",
       "With no argument, shows the command summary. With a command\n"
       "name (or alias), shows a detailed explanation of that command." },
