@@ -1,0 +1,46 @@
+﻿  Generating expr_parser.tab.c/.h with bison
+  Generating expr_lexer.yy.c/.h with flex
+  Generating cmdline_parser.tab.c/.h with bison
+  Generating cmdline_lexer.yy.c/.h with flex
+  breakpoints.c
+  commands.c
+  debugger.c
+  disasm.c
+  leakcheck.c
+  main.c
+  memory.c
+  registers.c
+  symbols.c
+  expr.c
+  watchpoints.c
+C:\Users\f-tsu\source\repos\windbg\windbg\watchpoints.c(1,1): warning C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
+  threads.c
+  processes.c
+  expr_parser.tab.c
+\expr_parser.tab.c(1216,36): warning C4244: 'return': '__int64' から 'long' への変換です。データが失われる可能性があります。
+  (ソース ファイル 'expr_parser.tab.c' をコンパイルしています)
+  
+\expr_parser.tab.c(1468,41): warning C4244: '初期化中': '__int64' から 'long' への変換です。データが失われる可能性があります。
+  (ソース ファイル 'expr_parser.tab.c' をコンパイルしています)
+  
+  expr_lexer.yy.c
+\expr_lexer.yy.c(1744,40): warning C4013: 関数 'isatty' は定義されていません。int 型の値を返す外部関数と見なします。
+  (ソース ファイル 'expr_lexer.yy.c' をコンパイルしています)
+  
+\expr_lexer.yy.c(1744,48): error C4996: 'fileno': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _fileno. See online help for details.
+  (ソース ファイル 'expr_lexer.yy.c' をコンパイルしています)
+  
+  cmdline_parser.tab.c
+\cmdline_parser.tab.c(979,36): warning C4244: 'return': '__int64' から 'long' への変換です。データが失われる可能性があります。
+  (ソース ファイル 'cmdline_parser.tab.c' をコンパイルしています)
+  
+\cmdline_parser.tab.c(1232,41): warning C4244: '初期化中': '__int64' から 'long' への変換です。データが失われる可能性があります。
+  (ソース ファイル 'cmdline_parser.tab.c' をコンパイルしています)
+  
+  cmdline_lexer.yy.c
+\cmdline_lexer.yy.c(2076,40): warning C4013: 関数 'isatty' は定義されていません。int 型の値を返す外部関数と見なします。
+  (ソース ファイル 'cmdline_lexer.yy.c' をコンパイルしています)
+  
+\cmdline_lexer.yy.c(2076,48): error C4996: 'fileno': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _fileno. See online help for details.
+  (ソース ファイル 'cmdline_lexer.yy.c' をコンパイルしています)
+  

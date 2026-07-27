@@ -1,0 +1,8 @@
+^C:\USERS\F-TSU\SOURCE\REPOS\WINDBG\WINDBG\EXPR_PARSER.Y
+win_bison -d -o expr_parser.tab.c expr_parser.y
+^C:\USERS\F-TSU\SOURCE\REPOS\WINDBG\WINDBG\EXPR_LEXER.L
+win_flex -o expr_lexer.yy.c expr_lexer.l
+^C:\USERS\F-TSU\SOURCE\REPOS\WINDBG\WINDBG\CMDLINE_PARSER.Y
+win_bison -d -o cmdline_parser.tab.c cmdline_parser.y
+^C:\USERS\F-TSU\SOURCE\REPOS\WINDBG\WINDBG\CMDLINE_LEXER.L
+win_flex -o cmdline_lexer.yy.c cmdline_lexer.l
